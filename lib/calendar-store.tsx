@@ -16,23 +16,28 @@ export type CalendarEvent = {
   reminderMinutes: number;
   notes?: string;
   notificationId?: string;
+  repeatWeekly?: boolean;
 };
 
-export type NewEvent = Omit<CalendarEvent, "id" | "done" | "notificationId">;
+export type NewEvent = Omit<CalendarEvent, "id" | "done" | "notificationId"> & { repeatWeekly?: boolean };
 
 type CalendarContextValue = {
   events: CalendarEvent[];
   hydrated: boolean;
   notificationsEnabled: boolean;
+  subjectColors: Record<string, string>;
   addEvent: (event: NewEvent) => Promise<void>;
   updateEvent: (id: string, event: NewEvent) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
   toggleEvent: (id: string) => Promise<void>;
   requestNotifications: () => Promise<boolean>;
+  setSubjectColor: (subject: string, color: string) => Promise<void>;
 };
 
 const STORAGE_KEY = "school-calendar-events-v1";
 const NOTIFICATION_KEY = "school-calendar-notifications-v1";
+const SUBJECT_COLORS_KEY = "school-calendar-subject-colors-v1";
+const DEFAULT_SUBJECT_COLORS: Record<string, string> = { "رياضيات": "#2878C8", "عربي": "#E26B45", "علوم": "#0F8C7D", "إنجليزي": "#8559B4", "اجتماعيات": "#C04A75", "نشاط": "#D28A24" };
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -75,8 +80,8 @@ function seedEvents(): CalendarEvent[] {
   const monday = startOfWeek(today);
   const date = (offset: number) => toDateKey(addDays(monday, offset));
   return [
-    { id: "seed-1", title: "الرياضيات", subject: "رياضيات", date: date(0), time: "08:00", type: "lesson", done: false, reminderMinutes: 15 },
-    { id: "seed-2", title: "اللغة العربية", subject: "عربي", date: date(1), time: "09:00", type: "lesson", done: false, reminderMinutes: 15 },
+    { id: "seed-1", title: "الرياضيات", subject: "رياضيات", date: date(0), time: "08:00", type: "lesson", done: false, reminderMinutes: 15, repeatWeekly: true },
+    { id: "seed-2", title: "اللغة العربية", subject: "عربي", date: date(1), time: "09:00", type: "lesson", done: false, reminderMinutes: 15, repeatWeekly: true },
     { id: "seed-3", title: "تسليم بحث الطاقة", subject: "علوم", date: date(2), time: "12:00", type: "homework", done: false, reminderMinutes: 60 },
     { id: "seed-4", title: "اختبار الوحدة الأولى", subject: "إنجليزي", date: date(3), time: "10:00", type: "exam", done: false, reminderMinutes: 1440 },
     { id: "seed-5", title: "مراجعة الدرس 4", subject: "اجتماعيات", date: date(4), time: "16:30", type: "evaluation", done: false, reminderMinutes: 30 },
@@ -124,23 +129,31 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [subjectColors, setSubjectColors] = useState<Record<string, string>>(DEFAULT_SUBJECT_COLORS);
 
   useEffect(() => {
     void (async () => {
-      const [storedEvents, storedNotifications] = await Promise.all([
+      const [storedEvents, storedNotifications, storedSubjectColors] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEY),
         AsyncStorage.getItem(NOTIFICATION_KEY),
+        AsyncStorage.getItem(SUBJECT_COLORS_KEY),
       ]);
       setEvents(storedEvents ? JSON.parse(storedEvents) : seedEvents());
       setNotificationsEnabled(storedNotifications === "true");
+      setSubjectColors(storedSubjectColors ? { ...DEFAULT_SUBJECT_COLORS, ...JSON.parse(storedSubjectColors) } : DEFAULT_SUBJECT_COLORS);
       setHydrated(true);
     })();
   }, []);
 
   const addEvent = async (input: NewEvent) => {
-    const event: CalendarEvent = { ...input, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, done: false };
-    if (notificationsEnabled) event.notificationId = await scheduleEventReminder(event);
-    const next = [...events, event];
+    const instances = input.repeatWeekly ? Array.from({ length: 8 }, (_, index) => ({ ...input, date: toDateKey(addDays(parseDateKey(input.date), index * 7)) })) : [input];
+    const created: CalendarEvent[] = [];
+    for (const instance of instances) {
+      const event: CalendarEvent = { ...instance, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, done: false };
+      if (notificationsEnabled) event.notificationId = await scheduleEventReminder(event);
+      created.push(event);
+    }
+    const next = [...events, ...created];
     setEvents(next);
     await persist(next);
   };
@@ -192,7 +205,13 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     return enabled;
   };
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications }), [events, hydrated, notificationsEnabled]);
+  const setSubjectColor = async (subject: string, color: string) => {
+    const next = { ...subjectColors, [subject]: color };
+    setSubjectColors(next);
+    await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(next));
+  };
+
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor }), [events, hydrated, notificationsEnabled, subjectColors]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useCalendar } from "@/lib/calendar-store";
@@ -8,7 +8,7 @@ const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC"
 const subjects = [{ name: "رياضيات", color: "#2878C8" }, { name: "عربي", color: "#E26B45" }, { name: "علوم", color: "#0F8C7D" }, { name: "إنجليزي", color: "#8559B4" }];
 
 export default function SettingsScreen() {
-  const { notificationsEnabled, requestNotifications } = useCalendar();
+  const { notificationsEnabled, requestNotifications, subjectColors, setSubjectColor } = useCalendar();
   const [darkMode, setDarkMode] = useState(false);
   const enable = async () => { const granted = await requestNotifications(); if (!granted) Alert.alert("التنبيهات غير مفعّلة", "يمكنك تفعيلها من إعدادات Android للسماح بالتذكير قبل الدروس والواجبات."); };
   return <ScreenContainer className="bg-[#F7F9FC]" edges={["top", "left", "right"]}>
@@ -19,9 +19,9 @@ export default function SettingsScreen() {
       <Text style={styles.section}>المظهر</Text>
       <View style={styles.card}><View style={styles.settingRow}><View style={[styles.settingIcon, { backgroundColor: "#F2EBF8" }]}><IconSymbol name="settings" size={21} color="#8559B4" /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>الوضع الداكن</Text><Text style={styles.settingSub}>قريبًا في النسخة القادمة</Text></View><Switch value={darkMode} onValueChange={setDarkMode} disabled trackColor={{ false: "#E7ECF2", true: "#E7ECF2" }} thumbColor="#B7C1C9" /></View></View>
       <Text style={styles.section}>المواد</Text>
-      <View style={styles.card}>{subjects.map((subject, index) => <View key={subject.name} style={[styles.subjectRow, index < subjects.length - 1 && styles.divider]}><View style={[styles.subjectDot, { backgroundColor: subject.color }]} /><Text style={styles.subjectName}>{subject.name}</Text><IconSymbol name="chevronDown" size={19} color="#A7B2BC" /></View>)}</View>
+      <View style={styles.card}>{subjects.map((subject, index) => <Pressable key={subject.name} onPress={() => void setSubjectColor(subject.name, subjectColors[subject.name] === subject.color ? "#D28A24" : subject.color)} style={[styles.subjectRow, index < subjects.length - 1 && styles.divider]}><View style={[styles.subjectDot, { backgroundColor: subjectColors[subject.name] ?? subject.color }]} /><Text style={styles.subjectName}>{subject.name}</Text><Text style={{ color: C.muted, fontSize: 9, marginRight: 6 }}>اضغط لتغيير اللون</Text></Pressable>)}</View>
       <Text style={styles.section}>عن التطبيق</Text>
-      <View style={styles.aboutCard}><View style={styles.aboutLogo}><IconSymbol name="calendar" size={24} color={C.white} /></View><View style={styles.aboutCopy}><Text style={styles.aboutTitle}>روزنامتي الدراسية</Text><Text style={styles.aboutSub}>نسخة تجريبية · مصممة للدراسة بدون تعقيد</Text></View><Text style={styles.version}>١.٠</Text></View>
+      <View style={styles.aboutCard}><Image source={require("@/assets/images/school-calendar-hero-small.jpg")} style={{ width: 48, height: 48, borderRadius: 15 }} /><View style={styles.aboutCopy}><Text style={styles.aboutTitle}>روزنامتي الدراسية</Text><Text style={styles.aboutSub}>نسخة تجريبية · مصممة للدراسة بدون تعقيد</Text></View><Text style={styles.version}>١.٠</Text></View>
       <View style={styles.offline}><IconSymbol name="cloudOff" size={17} color={C.teal} /><Text style={styles.offlineText}>كل مواعيدك محفوظة على الجهاز ويمكن الوصول إليها بدون إنترنت.</Text></View>
     </ScrollView>
   </ScreenContainer>;

@@ -44,6 +44,7 @@ export function EventEditor({
   const [type, setType] = useState<EventType>("lesson");
   const [reminderMinutes, setReminderMinutes] = useState("15");
   const [notes, setNotes] = useState("");
+  const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -55,6 +56,7 @@ export function EventEditor({
     setType(event?.type ?? "lesson");
     setReminderMinutes(String(event?.reminderMinutes ?? 15));
     setNotes(event?.notes ?? "");
+    setRepeatWeekly(event?.repeatWeekly ?? false);
   }, [visible, event, defaultDate]);
 
   const save = async () => {
@@ -68,6 +70,7 @@ export function EventEditor({
       type,
       reminderMinutes: Math.max(0, Number(reminderMinutes) || 0),
       notes: notes.trim(),
+      repeatWeekly,
     });
     setSaving(false);
   };
@@ -126,6 +129,11 @@ export function EventEditor({
               ))}
             </View>
 
+            <Pressable onPress={() => setRepeatWeekly((value) => !value)} style={styles.repeatRow}>
+              <View style={[styles.repeatCheck, repeatWeekly && styles.repeatCheckActive]}>{repeatWeekly && <IconSymbol name="check" size={14} color={PALETTE.white} />}</View>
+              <View style={styles.repeatCopy}><Text style={styles.repeatTitle}>تكرار الحصة أسبوعيًا</Text><Text style={styles.repeatSubtitle}>ينشئ الموعد للأسبوع الحالي والأسابيع السبعة القادمة</Text></View>
+            </Pressable>
+
             <Text style={styles.label}>ملاحظات (اختياري)</Text>
             <TextInput value={notes} onChangeText={setNotes} placeholder="أضف أي تفاصيل تساعدك" placeholderTextColor="#AAB5BF" style={[styles.input, styles.notes]} textAlign="right" multiline />
 
@@ -162,6 +170,12 @@ const styles = StyleSheet.create({
   reminderPillActive: { backgroundColor: "#E5F6F2", borderColor: PALETTE.teal },
   reminderText: { color: PALETTE.muted, fontSize: 12, fontWeight: "700" },
   reminderTextActive: { color: PALETTE.teal },
+  repeatRow: { flexDirection: "row-reverse", alignItems: "center", gap: 10, marginTop: 18, padding: 12, borderRadius: 14, backgroundColor: "#F1FAF8", borderWidth: 1, borderColor: "#D6F0EB" },
+  repeatCheck: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: "#B8C8CC", alignItems: "center", justifyContent: "center" },
+  repeatCheckActive: { backgroundColor: PALETTE.teal, borderColor: PALETTE.teal },
+  repeatCopy: { flex: 1, alignItems: "flex-end" },
+  repeatTitle: { color: PALETTE.ink, fontSize: 13, fontWeight: "800", textAlign: "right" },
+  repeatSubtitle: { color: PALETTE.muted, fontSize: 10, marginTop: 3, textAlign: "right" },
   saveButton: { marginTop: 24, height: 54, borderRadius: 17, backgroundColor: PALETTE.teal, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 9 },
   saveText: { color: PALETTE.white, fontSize: 15, fontWeight: "800" },
   pressed: { transform: [{ scale: 0.98 }], opacity: 0.92 },
