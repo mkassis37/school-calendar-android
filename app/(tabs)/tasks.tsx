@@ -4,7 +4,7 @@ import { ScreenContainer } from "@/components/screen-container";
 import { EventEditor } from "@/components/event-editor";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { EVENT_META, arabicNumber, formatArabicDate, parseDateKey, useCalendar, type CalendarEvent, type EventType } from "@/lib/calendar-store";
-import { homeworkProgress } from "@/lib/calendar-utils";
+import { homeworkProgress, weeklyStudySummary } from "@/lib/calendar-utils";
 
 const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2" };
 const filters: Array<{ key: "all" | EventType; label: string }> = [{ key: "all", label: "الكل" }, { key: "homework", label: "الواجبات" }, { key: "exam", label: "الامتحانات" }, { key: "evaluation", label: "التقييمات" }, { key: "activity", label: "الأنشطة" }];
@@ -22,6 +22,7 @@ export default function TasksScreen() {
   const examTotal = events.filter((event) => event.type === "exam").length;
   const examDone = events.filter((event) => event.type === "exam" && event.done).length;
   const examCompletion = homeworkProgress(examTotal, examDone);
+  const weekly = weeklyStudySummary(events);
   const openNew = () => { setEditingEvent(null); setEditorVisible(true); };
 
   return <ScreenContainer className="bg-background" edges={["top", "left", "right"]}>
@@ -30,12 +31,17 @@ export default function TasksScreen() {
       <View style={styles.summary}><View style={styles.summaryIcon}><IconSymbol name="checklist" size={25} color={C.teal} /></View><View style={styles.summaryText}><Text style={styles.summaryTitle}>{completion === 100 ? "أحسنت، أنجزت كل الواجبات!" : "نسبة إنجاز الواجبات"}</Text><Text style={styles.summarySub}>{arabicNumber(done)} من {arabicNumber(total)} واجبات مكتملة</Text></View><View style={styles.ring}><Text style={styles.ringText}>{arabicNumber(completion)}%</Text></View></View>
       <View style={{ marginTop: 10, marginBottom: 2 }}><View style={{ height: 8, borderRadius: 5, backgroundColor: "#E8F0F0", overflow: "hidden" }}><View style={{ width: `${completion}%`, height: "100%", borderRadius: 5, backgroundColor: C.teal }} /></View><View style={{ flexDirection: "row-reverse", justifyContent: "space-between", marginTop: 5 }}><Text style={{ color: C.teal, fontSize: 10, fontWeight: "800" }}>{arabicNumber(completion)}% مكتمل</Text><Text style={{ color: C.muted, fontSize: 10 }}>{arabicNumber(total - done)} متبقي</Text></View></View>
       <View style={{ marginTop: 12, padding: 13, borderRadius: 16, backgroundColor: C.white, borderWidth: 1, borderColor: C.border }}><View style={{ flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" }}><Text style={{ color: C.ink, fontSize: 13, fontWeight: "900" }}>نسبة إنجاز الامتحانات</Text><Text style={{ color: "#C04A75", fontSize: 13, fontWeight: "900" }}>{arabicNumber(examCompletion)}%</Text></View><View style={{ height: 8, borderRadius: 5, backgroundColor: "#F7EAF0", overflow: "hidden", marginTop: 9 }}><View style={{ width: `${examCompletion}%`, height: "100%", borderRadius: 5, backgroundColor: "#C04A75" }} /></View><Text style={{ color: C.muted, fontSize: 10, textAlign: "right", marginTop: 5 }}>{arabicNumber(examDone)} من {arabicNumber(examTotal)} امتحانات مكتملة · {arabicNumber(examTotal - examDone)} متبقي</Text></View>
+      <View style={{ marginTop: 12, padding: 14, borderRadius: 17, backgroundColor: "#142330", borderWidth: 1, borderColor: "#263D4F" }}><View style={{ flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" }}><Text style={{ color: "#FFFFFF", fontSize: 14, fontWeight: "900" }}>ملخص هذا الأسبوع</Text><Text style={{ color: "#A9E4D9", fontSize: 11, fontWeight: "800" }}>{arabicNumber(weekly.done)} من {arabicNumber(weekly.total)} مكتمل</Text></View><View style={{ flexDirection: "row-reverse", gap: 8, marginTop: 12 }}><WeeklyStat label="واجبات" done={weekly.homeworkDone} total={weekly.homeworkTotal} percent={weekly.homeworkPercent} color="#5DD6C2" /><WeeklyStat label="امتحانات" done={weekly.examDone} total={weekly.examTotal} percent={weekly.examPercent} color="#F28EAF" /></View></View>
       <View style={styles.filterRow}>{filters.map((item) => <Pressable key={item.key} onPress={() => setFilter(item.key)} style={[styles.filter, filter === item.key && styles.filterActive]}><Text style={[styles.filterText, filter === item.key && styles.filterTextActive]}>{item.label}</Text></Pressable>)}</View>
       <Pressable onPress={() => setShowDone((value) => !value)} style={styles.toggleDone}><View style={[styles.checkbox, showDone && styles.checkboxActive]}>{showDone && <IconSymbol name="check" size={13} color={C.white} />}</View><Text style={styles.toggleText}>إظهار المكتمل</Text></Pressable>
       <FlatList data={taskEvents} keyExtractor={(item) => item.id} showsVerticalScrollIndicator={false} contentContainerStyle={styles.list} renderItem={({ item }) => <TaskRow event={item} onToggle={() => void toggleEvent(item.id)} onEdit={() => { setEditingEvent(item); setEditorVisible(true); }} />} ListEmptyComponent={<View style={styles.empty}><IconSymbol name="checklist" size={30} color={C.teal} /><Text style={styles.emptyTitle}>لا توجد مهام في هذا التصنيف</Text><Text style={styles.emptySub}>أضف واجبًا أو امتحانًا من زر +</Text></View>} />
     </View>
     <EventEditor visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={editingEvent?.date ?? new Date().toISOString().slice(0, 10)} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); setEditorVisible(false); }} />
   </ScreenContainer>;
+}
+
+function WeeklyStat({ label, done, total, percent, color }: { label: string; done: number; total: number; percent: number; color: string }) {
+  return <View style={{ flex: 1, padding: 10, borderRadius: 13, backgroundColor: "#203545" }}><View style={{ flexDirection: "row-reverse", justifyContent: "space-between" }}><Text style={{ color: "#FFFFFF", fontSize: 11, fontWeight: "800" }}>{label}</Text><Text style={{ color, fontSize: 11, fontWeight: "900" }}>{arabicNumber(percent)}%</Text></View><View style={{ height: 6, borderRadius: 4, backgroundColor: "#365064", overflow: "hidden", marginTop: 8 }}><View style={{ width: `${percent}%`, height: "100%", backgroundColor: color }} /></View><Text style={{ color: "#B8C6D0", fontSize: 9, textAlign: "right", marginTop: 5 }}>{arabicNumber(done)} من {arabicNumber(total)} مكتمل</Text></View>;
 }
 
 function TaskRow({ event, onToggle, onEdit }: { event: CalendarEvent; onToggle: () => void; onEdit: () => void }) {
