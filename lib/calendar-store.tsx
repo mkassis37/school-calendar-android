@@ -6,6 +6,7 @@ import { notificationSoundForType } from "@/lib/calendar-utils";
 
 export type EventType = "lesson" | "homework" | "exam" | "evaluation" | "activity";
 export type NotificationSound = "homework" | "exam";
+export type ReminderDefaults = { homework: number; exam: number };
 
 export type CalendarEvent = {
   id: string;
@@ -29,6 +30,7 @@ type CalendarContextValue = {
   notificationsEnabled: boolean;
   subjectColors: Record<string, string>;
   notificationSounds: Record<NotificationSound, string>;
+  reminderDefaults: ReminderDefaults;
   addEvent: (event: NewEvent) => Promise<void>;
   updateEvent: (id: string, event: NewEvent) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
@@ -36,13 +38,16 @@ type CalendarContextValue = {
   requestNotifications: () => Promise<boolean>;
   setSubjectColor: (subject: string, color: string) => Promise<void>;
   setNotificationSound: (kind: NotificationSound, sound: string) => Promise<void>;
+  setReminderDefault: (kind: keyof ReminderDefaults, minutes: number) => Promise<void>;
 };
 
 const STORAGE_KEY = "school-calendar-events-v1";
 const NOTIFICATION_KEY = "school-calendar-notifications-v1";
 const SUBJECT_COLORS_KEY = "school-calendar-subject-colors-v1";
 const NOTIFICATION_SOUNDS_KEY = "school-calendar-notification-sounds-v1";
+const REMINDER_DEFAULTS_KEY = "school-calendar-reminder-defaults-v1";
 const DEFAULT_NOTIFICATION_SOUNDS: Record<NotificationSound, string> = { homework: "homework_soft.wav", exam: "exam_alert.wav" };
+const DEFAULT_REMINDER_DEFAULTS: ReminderDefaults = { homework: 60, exam: 1440 };
 const DEFAULT_SUBJECT_COLORS: Record<string, string> = { "رياضيات": "#2878C8", "عربي": "#E26B45", "علوم": "#0F8C7D", "إنجليزي": "#8559B4", "اجتماعيات": "#C04A75", "نشاط": "#D28A24" };
 
 Notifications.setNotificationHandler({
@@ -138,19 +143,22 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [subjectColors, setSubjectColors] = useState<Record<string, string>>(DEFAULT_SUBJECT_COLORS);
   const [notificationSounds, setNotificationSounds] = useState<Record<NotificationSound, string>>(DEFAULT_NOTIFICATION_SOUNDS);
+  const [reminderDefaults, setReminderDefaults] = useState<ReminderDefaults>(DEFAULT_REMINDER_DEFAULTS);
 
   useEffect(() => {
     void (async () => {
-      const [storedEvents, storedNotifications, storedSubjectColors, storedNotificationSounds] = await Promise.all([
+      const [storedEvents, storedNotifications, storedSubjectColors, storedNotificationSounds, storedReminderDefaults] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEY),
         AsyncStorage.getItem(NOTIFICATION_KEY),
         AsyncStorage.getItem(SUBJECT_COLORS_KEY),
         AsyncStorage.getItem(NOTIFICATION_SOUNDS_KEY),
+        AsyncStorage.getItem(REMINDER_DEFAULTS_KEY),
       ]);
       setEvents(storedEvents ? JSON.parse(storedEvents) : seedEvents());
       setNotificationsEnabled(storedNotifications === "true");
       setSubjectColors(storedSubjectColors ? { ...DEFAULT_SUBJECT_COLORS, ...JSON.parse(storedSubjectColors) } : DEFAULT_SUBJECT_COLORS);
       setNotificationSounds(storedNotificationSounds ? { ...DEFAULT_NOTIFICATION_SOUNDS, ...JSON.parse(storedNotificationSounds) } : DEFAULT_NOTIFICATION_SOUNDS);
+      setReminderDefaults(storedReminderDefaults ? { ...DEFAULT_REMINDER_DEFAULTS, ...JSON.parse(storedReminderDefaults) } : DEFAULT_REMINDER_DEFAULTS);
       setHydrated(true);
     })();
   }, []);
@@ -229,7 +237,13 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(NOTIFICATION_SOUNDS_KEY, JSON.stringify(next));
   };
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds]);
+  const setReminderDefault = async (kind: keyof ReminderDefaults, minutes: number) => {
+    const next = { ...reminderDefaults, [kind]: minutes };
+    setReminderDefaults(next);
+    await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(next));
+  };
+
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 

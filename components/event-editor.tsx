@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { EVENT_META, type CalendarEvent, type EventType, type NewEvent } from "@/lib/calendar-store";
+import { EVENT_META, type CalendarEvent, type EventType, type NewEvent, type ReminderDefaults } from "@/lib/calendar-store";
 
 const PALETTE = {
   ink: "#142330",
@@ -30,12 +30,14 @@ export function EventEditor({
   defaultDate,
   onClose,
   onSave,
+  reminderDefaults,
 }: {
   visible: boolean;
   event?: CalendarEvent | null;
   defaultDate: string;
   onClose: () => void;
   onSave: (value: NewEvent) => Promise<void>;
+  reminderDefaults?: ReminderDefaults;
 }) {
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
@@ -54,10 +56,10 @@ export function EventEditor({
     setDate(event?.date ?? defaultDate);
     setTime(event?.time ?? "08:00");
     setType(event?.type ?? "lesson");
-    setReminderMinutes(String(event?.reminderMinutes ?? 15));
+    setReminderMinutes(String(event?.reminderMinutes ?? (event?.type === "exam" ? reminderDefaults?.exam : event?.type === "homework" ? reminderDefaults?.homework : 15)));
     setNotes(event?.notes ?? "");
     setRepeatWeekly(event?.repeatWeekly ?? false);
-  }, [visible, event, defaultDate]);
+  }, [visible, event, defaultDate, reminderDefaults]);
 
   const save = async () => {
     if (!title.trim() || !date.match(/^\d{4}-\d{2}-\d{2}$/)) return;

@@ -8,7 +8,7 @@ import { addDays, arabicNumber, EVENT_META, formatArabicDate, formatDayNumber, p
 const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2", soft: "#EDF8F6", amber: "#D28A24" };
 
 export default function CalendarScreen() {
-  const { events, hydrated, subjectColors, addEvent, updateEvent, deleteEvent, toggleEvent } = useCalendar();
+  const { events, hydrated, subjectColors, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent } = useCalendar();
   const [selectedDate, setSelectedDate] = useState(toDateKey(new Date()));
   const [weekAnchor, setWeekAnchor] = useState(startOfWeek(new Date()));
   const [editorVisible, setEditorVisible] = useState(false);
@@ -29,7 +29,7 @@ export default function CalendarScreen() {
   const confirmDelete = (event: CalendarEvent) => Alert.alert("حذف الموعد؟", `سيتم حذف «${event.title}» من جهازك.`, [{ text: "إلغاء", style: "cancel" }, { text: "حذف", style: "destructive", onPress: () => void deleteEvent(event.id) }]);
 
   return (
-    <ScreenContainer className="bg-[#F7F9FC]" edges={["top", "left", "right"]}>
+    <ScreenContainer className="bg-background" edges={["top", "left", "right"]}>
       <View style={styles.page}>
         <View style={styles.topBar}>
           <View style={styles.brandRow}>
@@ -65,7 +65,7 @@ export default function CalendarScreen() {
 
         <View style={styles.progressCard}><View style={styles.progressTop}><Text style={styles.progressTitle}>تقدّمك هذا الأسبوع</Text><Text style={styles.progressValue}>{arabicNumber(completedCount)} / {arabicNumber(events.length)} مكتمل</Text></View><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${events.length ? Math.max(4, (completedCount / events.length) * 100) : 0}%` }]} /></View></View>
       </View>
-      <EventEditor visible={editorVisible} event={editingEvent} defaultDate={selectedDate} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); setSelectedDate(value.date); setWeekAnchor(startOfWeek(parseDateKey(value.date))); setEditorVisible(false); }} />
+      <EventEditor visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={selectedDate} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); setSelectedDate(value.date); setWeekAnchor(startOfWeek(parseDateKey(value.date))); setEditorVisible(false); }} />
     </ScreenContainer>
   );
 }

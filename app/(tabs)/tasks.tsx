@@ -10,7 +10,7 @@ const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC"
 const filters: Array<{ key: "all" | EventType; label: string }> = [{ key: "all", label: "الكل" }, { key: "homework", label: "الواجبات" }, { key: "exam", label: "الامتحانات" }, { key: "evaluation", label: "التقييمات" }, { key: "activity", label: "الأنشطة" }];
 
 export default function TasksScreen() {
-  const { events, addEvent, updateEvent, toggleEvent } = useCalendar();
+  const { events, addEvent, updateEvent, toggleEvent, reminderDefaults } = useCalendar();
   const [filter, setFilter] = useState<"all" | EventType>("all");
   const [showDone, setShowDone] = useState(true);
   const [editorVisible, setEditorVisible] = useState(false);
@@ -19,18 +19,22 @@ export default function TasksScreen() {
   const total = events.filter((event) => event.type === "homework").length;
   const done = events.filter((event) => event.type === "homework" && event.done).length;
   const completion = homeworkProgress(total, done);
+  const examTotal = events.filter((event) => event.type === "exam").length;
+  const examDone = events.filter((event) => event.type === "exam" && event.done).length;
+  const examCompletion = homeworkProgress(examTotal, examDone);
   const openNew = () => { setEditingEvent(null); setEditorVisible(true); };
 
-  return <ScreenContainer className="bg-[#F7F9FC]" edges={["top", "left", "right"]}>
+  return <ScreenContainer className="bg-background" edges={["top", "left", "right"]}>
     <View style={styles.page}>
       <View style={styles.header}><View><Text style={styles.title}>المهام</Text><Text style={styles.subtitle}>خلّي كل خطوة واضحة أمامك</Text></View><Pressable onPress={openNew} style={({ pressed }) => [styles.add, pressed && styles.pressed]}><IconSymbol name="add" size={22} color={C.white} /></Pressable></View>
       <View style={styles.summary}><View style={styles.summaryIcon}><IconSymbol name="checklist" size={25} color={C.teal} /></View><View style={styles.summaryText}><Text style={styles.summaryTitle}>{completion === 100 ? "أحسنت، أنجزت كل الواجبات!" : "نسبة إنجاز الواجبات"}</Text><Text style={styles.summarySub}>{arabicNumber(done)} من {arabicNumber(total)} واجبات مكتملة</Text></View><View style={styles.ring}><Text style={styles.ringText}>{arabicNumber(completion)}%</Text></View></View>
       <View style={{ marginTop: 10, marginBottom: 2 }}><View style={{ height: 8, borderRadius: 5, backgroundColor: "#E8F0F0", overflow: "hidden" }}><View style={{ width: `${completion}%`, height: "100%", borderRadius: 5, backgroundColor: C.teal }} /></View><View style={{ flexDirection: "row-reverse", justifyContent: "space-between", marginTop: 5 }}><Text style={{ color: C.teal, fontSize: 10, fontWeight: "800" }}>{arabicNumber(completion)}% مكتمل</Text><Text style={{ color: C.muted, fontSize: 10 }}>{arabicNumber(total - done)} متبقي</Text></View></View>
+      <View style={{ marginTop: 12, padding: 13, borderRadius: 16, backgroundColor: C.white, borderWidth: 1, borderColor: C.border }}><View style={{ flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" }}><Text style={{ color: C.ink, fontSize: 13, fontWeight: "900" }}>نسبة إنجاز الامتحانات</Text><Text style={{ color: "#C04A75", fontSize: 13, fontWeight: "900" }}>{arabicNumber(examCompletion)}%</Text></View><View style={{ height: 8, borderRadius: 5, backgroundColor: "#F7EAF0", overflow: "hidden", marginTop: 9 }}><View style={{ width: `${examCompletion}%`, height: "100%", borderRadius: 5, backgroundColor: "#C04A75" }} /></View><Text style={{ color: C.muted, fontSize: 10, textAlign: "right", marginTop: 5 }}>{arabicNumber(examDone)} من {arabicNumber(examTotal)} امتحانات مكتملة · {arabicNumber(examTotal - examDone)} متبقي</Text></View>
       <View style={styles.filterRow}>{filters.map((item) => <Pressable key={item.key} onPress={() => setFilter(item.key)} style={[styles.filter, filter === item.key && styles.filterActive]}><Text style={[styles.filterText, filter === item.key && styles.filterTextActive]}>{item.label}</Text></Pressable>)}</View>
       <Pressable onPress={() => setShowDone((value) => !value)} style={styles.toggleDone}><View style={[styles.checkbox, showDone && styles.checkboxActive]}>{showDone && <IconSymbol name="check" size={13} color={C.white} />}</View><Text style={styles.toggleText}>إظهار المكتمل</Text></Pressable>
       <FlatList data={taskEvents} keyExtractor={(item) => item.id} showsVerticalScrollIndicator={false} contentContainerStyle={styles.list} renderItem={({ item }) => <TaskRow event={item} onToggle={() => void toggleEvent(item.id)} onEdit={() => { setEditingEvent(item); setEditorVisible(true); }} />} ListEmptyComponent={<View style={styles.empty}><IconSymbol name="checklist" size={30} color={C.teal} /><Text style={styles.emptyTitle}>لا توجد مهام في هذا التصنيف</Text><Text style={styles.emptySub}>أضف واجبًا أو امتحانًا من زر +</Text></View>} />
     </View>
-    <EventEditor visible={editorVisible} event={editingEvent} defaultDate={editingEvent?.date ?? new Date().toISOString().slice(0, 10)} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); setEditorVisible(false); }} />
+    <EventEditor visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={editingEvent?.date ?? new Date().toISOString().slice(0, 10)} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); setEditorVisible(false); }} />
   </ScreenContainer>;
 }
 
