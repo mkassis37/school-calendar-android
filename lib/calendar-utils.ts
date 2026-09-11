@@ -21,6 +21,11 @@ export function startOfWeek(date: Date) {
   return next;
 }
 
+export function homeworkProgress(total: number, completed: number) {
+  if (total <= 0) return 0;
+  return Math.round((Math.max(0, Math.min(completed, total)) / total) * 100);
+}
+
 export const EVENT_META: Record<EventType, { label: string; color: string; soft: string; icon: string }> = {
   lesson: { label: "درس", color: "#2878C8", soft: "#E7F0FB", icon: "menu-book" },
   homework: { label: "واجب", color: "#E26B45", soft: "#FFF0EB", icon: "assignment" },

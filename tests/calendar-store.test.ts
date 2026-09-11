@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, EVENT_META, startOfWeek, toDateKey } from "../lib/calendar-utils";
+import { addDays, EVENT_META, homeworkProgress, startOfWeek, toDateKey } from "../lib/calendar-utils";
 
 describe("calendar helpers", () => {
   it("formats a local date as an ISO calendar key", () => {
@@ -22,5 +22,11 @@ describe("calendar helpers", () => {
     expect(Object.keys(EVENT_META)).toEqual(["lesson", "homework", "exam", "evaluation", "activity"]);
     expect(EVENT_META.exam.label).toBe("امتحان");
     expect(EVENT_META.homework.color).toMatch(/^#/);
+  });
+
+  it("calculates homework completion as a bounded percentage", () => {
+    expect(homeworkProgress(4, 1)).toBe(25);
+    expect(homeworkProgress(0, 0)).toBe(0);
+    expect(homeworkProgress(4, 9)).toBe(100);
   });
 });
