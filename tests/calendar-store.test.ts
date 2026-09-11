@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, EVENT_META, homeworkProgress, notificationSoundForType, startOfWeek, toDateKey, weeklyStudySummary } from "../lib/calendar-utils";
+import { addDays, EVENT_META, homeworkProgress, inspectCalendarData, notificationSoundForType, startOfWeek, toDateKey, weeklyStudySummary } from "../lib/calendar-utils";
 
 describe("calendar helpers", () => {
   it("formats a local date as an ISO calendar key", () => {
@@ -44,5 +44,12 @@ describe("calendar helpers", () => {
       { date: "2026-09-14", type: "exam" as const, done: false },
     ];
     expect(weeklyStudySummary(events, new Date(2026, 8, 11))).toMatchObject({ homeworkTotal: 2, homeworkDone: 1, homeworkPercent: 50, examTotal: 1, examDone: 1, examPercent: 100, total: 3, done: 2 });
+  });
+
+  it("detects malformed calendar records during a local security scan", () => {
+    const valid = { id: "1", title: "واجب", subject: "رياضيات", date: "2026-09-11", time: "10:00", type: "homework" as const, done: false, reminderMinutes: 30 };
+    expect(inspectCalendarData([valid]).safe).toBe(true);
+    expect(inspectCalendarData([{ ...valid, reminderMinutes: -1 }]).safe).toBe(false);
+    expect(inspectCalendarData("not-an-array").safe).toBe(false);
   });
 });

@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Platform } from "react-native";
-import { notificationSoundForType } from "@/lib/calendar-utils";
+import { inspectCalendarData, notificationSoundForType, type SecurityScanResult } from "@/lib/calendar-utils";
 
 export type EventType = "lesson" | "homework" | "exam" | "evaluation" | "activity";
 export type NotificationSound = "homework" | "exam";
@@ -39,6 +39,7 @@ type CalendarContextValue = {
   setSubjectColor: (subject: string, color: string) => Promise<void>;
   setNotificationSound: (kind: NotificationSound, sound: string) => Promise<void>;
   setReminderDefault: (kind: keyof ReminderDefaults, minutes: number) => Promise<void>;
+  runSecurityScan: () => SecurityScanResult;
 };
 
 const STORAGE_KEY = "school-calendar-events-v1";
@@ -243,7 +244,9 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(next));
   };
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults]);
+  const runSecurityScan = () => inspectCalendarData(events);
+
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, runSecurityScan }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 

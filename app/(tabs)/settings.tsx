@@ -10,10 +10,11 @@ const soundOptions = [{ value: "homework_soft.wav", label: "نغمة هادئة"
 const reminderOptions = [{ value: 0, label: "بدون" }, { value: 15, label: "١٥ د" }, { value: 30, label: "٣٠ د" }, { value: 60, label: "ساعة" }, { value: 1440, label: "يوم" }];
 
 export default function SettingsScreen() {
-  const { notificationsEnabled, requestNotifications, subjectColors, setSubjectColor, notificationSounds, setNotificationSound, reminderDefaults, setReminderDefault } = useCalendar();
+  const { notificationsEnabled, requestNotifications, subjectColors, setSubjectColor, notificationSounds, setNotificationSound, reminderDefaults, setReminderDefault, runSecurityScan } = useCalendar();
   const { colorScheme, setColorScheme } = useThemeContext();
   const darkMode = colorScheme === "dark";
   const enable = async () => { const granted = await requestNotifications(); if (!granted) Alert.alert("التنبيهات غير مفعّلة", "يمكنك تفعيلها من إعدادات Android للسماح بالتذكير قبل الدروس والواجبات."); };
+  const scanSecurity = () => { const result = runSecurityScan(); Alert.alert(result.safe ? "فحص الأمان مكتمل" : "تنبيه أمان", `${result.message}\nتم فحص ${result.checked} موعدًا.\n\nهذا الفحص يتحقق من سلامة بيانات التطبيق وإعداداته، ولا يغني عن Google Play Protect أو مضاد الفيروسات في Android.`); };
   return <ScreenContainer className="bg-background" edges={["top", "left", "right"]}>
     <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
       <View style={styles.header}><Text style={styles.title}>الإعدادات</Text><Text style={styles.subtitle}>خلّي الروزنامة على طريقتك</Text></View>
@@ -23,6 +24,8 @@ export default function SettingsScreen() {
       <View style={styles.card}><ReminderChoice label="التنبيه الافتراضي للواجبات" value={reminderDefaults.homework} onChange={(value) => void setReminderDefault("homework", value)} /><View style={styles.divider} /><ReminderChoice label="التنبيه الافتراضي للامتحانات" value={reminderDefaults.exam} onChange={(value) => void setReminderDefault("exam", value)} /></View>
       <Text style={styles.section}>المظهر</Text>
       <View style={styles.card}><View style={styles.settingRow}><View style={[styles.settingIcon, { backgroundColor: darkMode ? "#2D2850" : "#F2EBF8" }]}><IconSymbol name="settings" size={21} color={darkMode ? "#B9A8FF" : "#8559B4"} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>الوضع الليلي</Text><Text style={styles.settingSub}>{darkMode ? "مفعّل الآن" : "استخدم مظهرًا داكنًا ليلًا"}</Text></View><Switch value={darkMode} onValueChange={(value) => setColorScheme(value ? "dark" : "light")} trackColor={{ false: "#E7ECF2", true: "#A9E4D9" }} thumbColor={darkMode ? C.teal : "#FFFFFF"} /></View></View>
+      <Text style={styles.section}>الأمان والخصوصية</Text>
+      <View style={styles.card}><Pressable onPress={scanSecurity} style={({ pressed }) => [styles.settingRow, pressed && { opacity: 0.7 }]}><View style={[styles.settingIcon, { backgroundColor: "#E8F4FB" }]}><IconSymbol name="info" size={22} color="#2878C8" /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>فحص أمان البيانات</Text><Text style={styles.settingSub}>تحقق من سلامة المواعيد المحفوظة على الجهاز</Text></View><Text style={{ color: C.teal, fontSize: 11, fontWeight: "900" }}>فحص الآن</Text></Pressable><Text style={styles.helper}>التطبيق يعمل دون رفع بياناتك. الحماية من الفيروسات على مستوى الجهاز يوفرها Android وGoogle Play Protect.</Text></View>
       <Text style={styles.section}>المواد</Text>
       <View style={styles.card}>{subjects.map((subject, index) => <Pressable key={subject.name} onPress={() => void setSubjectColor(subject.name, subjectColors[subject.name] === subject.color ? "#D28A24" : subject.color)} style={[styles.subjectRow, index < subjects.length - 1 && styles.divider]}><View style={[styles.subjectDot, { backgroundColor: subjectColors[subject.name] ?? subject.color }]} /><Text style={styles.subjectName}>{subject.name}</Text><Text style={{ color: C.muted, fontSize: 9, marginRight: 6 }}>اضغط لتغيير اللون</Text></Pressable>)}</View>
       <Text style={styles.section}>عن التطبيق</Text>
