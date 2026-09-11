@@ -1,48 +1,80 @@
-import { ScrollView, Text, View, TouchableOpacity } from "react-native";
-
+import { useMemo, useState } from "react";
+import { Alert, FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
+import { EventEditor } from "@/components/event-editor";
+import { IconSymbol } from "@/components/ui/icon-symbol";
+import { addDays, arabicNumber, EVENT_META, formatArabicDate, formatDayNumber, parseDateKey, SHORT_DAYS, startOfWeek, toDateKey, useCalendar, type CalendarEvent } from "@/lib/calendar-store";
 
-/**
- * Home Screen - NativeWind Example
- *
- * This template uses NativeWind (Tailwind CSS for React Native).
- * You can use familiar Tailwind classes directly in className props.
- *
- * Key patterns:
- * - Use `className` instead of `style` for most styling
- * - Theme colors: use tokens directly (bg-background, text-foreground, bg-primary, etc.); no dark: prefix needed
- * - Responsive: standard Tailwind breakpoints work on web
- * - Custom colors defined in tailwind.config.js
- */
-export default function HomeScreen() {
+const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2", soft: "#EDF8F6", amber: "#D28A24" };
+
+export default function CalendarScreen() {
+  const { events, hydrated, addEvent, updateEvent, deleteEvent, toggleEvent } = useCalendar();
+  const [selectedDate, setSelectedDate] = useState(toDateKey(new Date()));
+  const [weekAnchor, setWeekAnchor] = useState(startOfWeek(new Date()));
+  const [editorVisible, setEditorVisible] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const week = useMemo(() => Array.from({ length: 7 }, (_, index) => addDays(weekAnchor, index)), [weekAnchor]);
+  const selectedEvents = useMemo(() => events.filter((event) => event.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time)), [events, selectedDate]);
+  const selectedDateObj = parseDateKey(selectedDate);
+  const todayKey = toDateKey(new Date());
+  const completedCount = events.filter((event) => event.done).length;
+
+  const openNew = () => { setEditingEvent(null); setEditorVisible(true); };
+  const openEdit = (event: CalendarEvent) => { setEditingEvent(event); setEditorVisible(true); };
+  const moveWeek = (amount: number) => {
+    const next = addDays(weekAnchor, amount * 7);
+    setWeekAnchor(next);
+    setSelectedDate(toDateKey(next));
+  };
+  const confirmDelete = (event: CalendarEvent) => Alert.alert("حذف الموعد؟", `سيتم حذف «${event.title}» من جهازك.`, [{ text: "إلغاء", style: "cancel" }, { text: "حذف", style: "destructive", onPress: () => void deleteEvent(event.id) }]);
+
   return (
-    <ScreenContainer className="p-6">
-      <ScrollView contentContainerStyle={{ flexGrow: 1 }}>
-        <View className="flex-1 gap-8">
-          {/* Hero Section */}
-          <View className="items-center gap-2">
-            <Text className="text-4xl font-bold text-foreground">Welcome</Text>
-            <Text className="text-base text-muted text-center">
-              Edit app/(tabs)/index.tsx to get started
-            </Text>
+    <ScreenContainer className="bg-[#F7F9FC]" edges={["top", "left", "right"]}>
+      <View style={styles.page}>
+        <View style={styles.topBar}>
+          <View style={styles.brandRow}>
+            <View style={styles.logo}><IconSymbol name="calendar" size={23} color={C.white} /></View>
+            <View><Text style={styles.brand}>روزنامتي</Text><Text style={styles.brandSub}>الدراسية</Text></View>
           </View>
-
-          {/* Example Card */}
-          <View className="w-full max-w-sm self-center bg-surface rounded-2xl p-6 shadow-sm border border-border">
-            <Text className="text-lg font-semibold text-foreground mb-2">NativeWind Ready</Text>
-            <Text className="text-sm text-muted leading-relaxed">
-              Use Tailwind CSS classes directly in your React Native components.
-            </Text>
-          </View>
-
-          {/* Example Button */}
-          <View className="items-center">
-            <TouchableOpacity className="bg-primary px-6 py-3 rounded-full active:opacity-80">
-              <Text className="text-background font-semibold">Get Started</Text>
-            </TouchableOpacity>
+          <View style={styles.topActions}>
+            <Pressable onPress={() => { setSelectedDate(todayKey); setWeekAnchor(startOfWeek(new Date())); }} style={styles.todayButton}><IconSymbol name="today" size={18} color={C.teal} /><Text style={styles.todayText}>اليوم</Text></Pressable>
+            <Pressable onPress={openNew} style={({ pressed }) => [styles.addButton, pressed && styles.pressed]}><IconSymbol name="add" size={22} color={C.white} /></Pressable>
           </View>
         </View>
-      </ScrollView>
+
+        <View style={styles.offlineStrip}><IconSymbol name="cloudOff" size={16} color={C.teal} /><Text style={styles.offlineText}>يعمل دون إنترنت · كل بياناتك محفوظة على هذا الجهاز</Text></View>
+
+        <View style={styles.monthRow}>
+          <Text style={styles.monthTitle}>{formatArabicDate(selectedDateObj)}</Text>
+          <View style={styles.arrows}><Pressable onPress={() => moveWeek(1)} style={styles.arrow}><IconSymbol name="arrow" size={19} color={C.ink} /></Pressable><Pressable onPress={() => moveWeek(-1)} style={styles.arrow}><IconSymbol name="back" size={19} color={C.ink} /></Pressable></View>
+        </View>
+
+        <View style={styles.weekCard}>
+          {week.map((date, index) => {
+            const key = toDateKey(date);
+            const active = key === selectedDate;
+            const isToday = key === todayKey;
+            const count = events.filter((event) => event.date === key).length;
+            return <Pressable key={key} onPress={() => setSelectedDate(key)} style={[styles.dayCell, active && styles.dayCellActive]}><Text style={[styles.dayLabel, active && styles.dayLabelActive]}>{SHORT_DAYS[index]}</Text><View style={[styles.dayNumber, active && styles.dayNumberActive, isToday && !active && styles.dayNumberToday]}><Text style={[styles.dayNumberText, active && styles.dayNumberTextActive]}>{formatDayNumber(date)}</Text></View><View style={styles.dotRow}>{count > 0 ? <View style={[styles.eventDot, active && { backgroundColor: C.white }]} /> : <View style={styles.emptyDot} />}</View></Pressable>;
+          })}
+        </View>
+
+        <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>{selectedDate === todayKey ? "اليوم" : formatArabicDate(selectedDateObj)}</Text><Text style={styles.sectionCount}>{arabicNumber(selectedEvents.length)} مواعيد</Text></View>
+
+        {!hydrated ? <View style={styles.loading}><Text style={styles.muted}>جارٍ تجهيز تقويمك...</Text></View> : <FlatList data={selectedEvents} keyExtractor={(item) => item.id} contentContainerStyle={selectedEvents.length ? styles.list : styles.emptyList} showsVerticalScrollIndicator={false} renderItem={({ item }) => <EventCard event={item} onEdit={() => openEdit(item)} onDelete={() => confirmDelete(item)} onToggle={() => void toggleEvent(item.id)} />} ListEmptyComponent={<View style={styles.emptyState}><View style={styles.emptyIcon}><IconSymbol name="calendar" size={28} color={C.teal} /></View><Text style={styles.emptyTitle}>لا توجد مواعيد هنا</Text><Text style={styles.emptyText}>أضف درسًا أو واجبًا أو امتحانًا ليظهر في جدولك.</Text><Pressable onPress={openNew} style={styles.emptyButton}><IconSymbol name="add" size={18} color={C.white} /><Text style={styles.emptyButtonText}>إضافة موعد</Text></Pressable></View>} />}
+
+        <View style={styles.progressCard}><View style={styles.progressTop}><Text style={styles.progressTitle}>تقدّمك هذا الأسبوع</Text><Text style={styles.progressValue}>{arabicNumber(completedCount)} / {arabicNumber(events.length)} مكتمل</Text></View><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${events.length ? Math.max(4, (completedCount / events.length) * 100) : 0}%` }]} /></View></View>
+      </View>
+      <EventEditor visible={editorVisible} event={editingEvent} defaultDate={selectedDate} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); setSelectedDate(value.date); setWeekAnchor(startOfWeek(parseDateKey(value.date))); setEditorVisible(false); }} />
     </ScreenContainer>
   );
 }
+
+function EventCard({ event, onEdit, onDelete, onToggle }: { event: CalendarEvent; onEdit: () => void; onDelete: () => void; onToggle: () => void }) {
+  const meta = EVENT_META[event.type];
+  return <Pressable onPress={onEdit} onLongPress={onDelete} style={({ pressed }) => [styles.eventCard, pressed && styles.cardPressed]}><View style={[styles.eventAccent, { backgroundColor: meta.color }]} /><View style={styles.eventMain}><View style={styles.eventTop}><View style={styles.eventActions}><Pressable onPress={onDelete} hitSlop={8}><IconSymbol name="delete" size={18} color="#A7B2BC" /></Pressable><Pressable onPress={onEdit} hitSlop={8}><IconSymbol name="edit" size={17} color="#A7B2BC" /></Pressable></View><View style={styles.eventTitleWrap}><Text style={[styles.eventTitle, event.done && styles.doneText]}>{event.title}</Text><Text style={styles.eventSubject}>{event.subject}</Text></View></View><View style={styles.eventBottom}><Pressable onPress={onToggle} style={[styles.doneButton, event.done && { backgroundColor: C.teal, borderColor: C.teal }]}><IconSymbol name="check" size={14} color={event.done ? C.white : "#A4B1BC"} /></Pressable><Text style={styles.eventTime}>{event.time}</Text><View style={[styles.typeBadge, { backgroundColor: meta.soft }]}><Text style={[styles.typeBadgeText, { color: meta.color }]}>{meta.label}</Text></View></View></View></Pressable>;
+}
+
+const styles = StyleSheet.create({
+  page: { flex: 1, paddingHorizontal: 18 }, topBar: { height: 70, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" }, brandRow: { flexDirection: "row-reverse", alignItems: "center", gap: 10 }, logo: { width: 42, height: 42, borderRadius: 14, backgroundColor: C.teal, alignItems: "center", justifyContent: "center" }, brand: { color: C.ink, fontSize: 18, fontWeight: "900", textAlign: "right" }, brandSub: { color: C.muted, fontSize: 11, fontWeight: "600", marginTop: 1, textAlign: "right" }, topActions: { flexDirection: "row-reverse", alignItems: "center", gap: 8 }, todayButton: { height: 36, paddingHorizontal: 10, borderRadius: 12, borderWidth: 1, borderColor: C.border, backgroundColor: C.white, flexDirection: "row-reverse", alignItems: "center", gap: 5 }, todayText: { color: C.teal, fontSize: 12, fontWeight: "800" }, addButton: { width: 40, height: 40, borderRadius: 13, backgroundColor: C.teal, alignItems: "center", justifyContent: "center", shadowColor: C.teal, shadowOpacity: 0.22, shadowRadius: 8, shadowOffset: { width: 0, height: 4 }, elevation: 3 }, pressed: { transform: [{ scale: 0.96 }], opacity: 0.9 }, offlineStrip: { height: 32, borderRadius: 10, backgroundColor: C.soft, flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 15 }, offlineText: { color: C.teal, fontSize: 11, fontWeight: "700" }, monthRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }, monthTitle: { color: C.ink, fontSize: 20, fontWeight: "900", textAlign: "right" }, arrows: { flexDirection: "row-reverse", gap: 6 }, arrow: { width: 34, height: 34, borderRadius: 11, backgroundColor: C.white, borderWidth: 1, borderColor: C.border, alignItems: "center", justifyContent: "center" }, weekCard: { flexDirection: "row-reverse", backgroundColor: C.white, borderRadius: 19, padding: 8, borderWidth: 1, borderColor: C.border, shadowColor: "#142330", shadowOpacity: 0.04, shadowRadius: 12, shadowOffset: { width: 0, height: 5 }, elevation: 1 }, dayCell: { flex: 1, alignItems: "center", paddingVertical: 6, borderRadius: 14 }, dayCellActive: { backgroundColor: C.teal }, dayLabel: { color: C.muted, fontSize: 10, fontWeight: "800", marginBottom: 5 }, dayLabelActive: { color: "#D8FFFA" }, dayNumber: { width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center" }, dayNumberActive: { backgroundColor: C.white }, dayNumberToday: { borderWidth: 1.5, borderColor: C.teal }, dayNumberText: { color: C.ink, fontSize: 14, fontWeight: "800" }, dayNumberTextActive: { color: C.teal }, dotRow: { height: 9, justifyContent: "center" }, eventDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: C.teal }, emptyDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: "transparent" }, sectionHeader: { flexDirection: "row-reverse", alignItems: "baseline", justifyContent: "space-between", marginTop: 22, marginBottom: 10 }, sectionTitle: { color: C.ink, fontSize: 16, fontWeight: "900", textAlign: "right" }, sectionCount: { color: C.muted, fontSize: 12, fontWeight: "700" }, list: { paddingBottom: 9, gap: 9 }, emptyList: { flexGrow: 1, justifyContent: "center" }, eventCard: { minHeight: 95, backgroundColor: C.white, borderRadius: 17, borderWidth: 1, borderColor: C.border, flexDirection: "row-reverse", overflow: "hidden", shadowColor: "#142330", shadowOpacity: 0.035, shadowRadius: 9, shadowOffset: { width: 0, height: 3 }, elevation: 1 }, cardPressed: { opacity: 0.82 }, eventAccent: { width: 5 }, eventMain: { flex: 1, padding: 12, paddingRight: 13 }, eventTop: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "flex-start" }, eventTitleWrap: { flex: 1, alignItems: "flex-end" }, eventTitle: { color: C.ink, fontSize: 15, fontWeight: "800", textAlign: "right" }, doneText: { textDecorationLine: "line-through", color: C.muted }, eventSubject: { color: C.muted, fontSize: 11, marginTop: 3, textAlign: "right" }, eventActions: { flexDirection: "row", gap: 12, marginTop: 1, marginLeft: 8 }, eventBottom: { flexDirection: "row-reverse", alignItems: "center", gap: 8, marginTop: 10 }, doneButton: { width: 21, height: 21, borderRadius: 7, borderWidth: 1.5, borderColor: "#C8D1D9", alignItems: "center", justifyContent: "center" }, eventTime: { color: C.muted, fontSize: 11, fontWeight: "700", marginLeft: "auto" }, typeBadge: { paddingHorizontal: 9, paddingVertical: 4, borderRadius: 8 }, typeBadgeText: { fontSize: 10, fontWeight: "800" }, emptyState: { alignItems: "center", paddingVertical: 24 }, emptyIcon: { width: 58, height: 58, borderRadius: 20, backgroundColor: C.soft, alignItems: "center", justifyContent: "center", marginBottom: 12 }, emptyTitle: { color: C.ink, fontSize: 16, fontWeight: "900" }, emptyText: { color: C.muted, fontSize: 12, textAlign: "center", lineHeight: 19, maxWidth: 250, marginTop: 5 }, emptyButton: { flexDirection: "row-reverse", alignItems: "center", gap: 5, marginTop: 14, backgroundColor: C.teal, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 9 }, emptyButtonText: { color: C.white, fontSize: 12, fontWeight: "800" }, loading: { flex: 1, justifyContent: "center", alignItems: "center" }, muted: { color: C.muted }, progressCard: { backgroundColor: C.white, borderRadius: 16, borderWidth: 1, borderColor: C.border, padding: 13, marginBottom: 8, marginTop: 3 }, progressTop: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center", marginBottom: 9 }, progressTitle: { color: C.ink, fontSize: 12, fontWeight: "800" }, progressValue: { color: C.teal, fontSize: 11, fontWeight: "800" }, progressTrack: { height: 7, borderRadius: 5, backgroundColor: "#E9F0F1", overflow: "hidden" }, progressFill: { height: "100%", borderRadius: 5, backgroundColor: C.teal },
+});
