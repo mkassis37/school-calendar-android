@@ -48,10 +48,9 @@ const NOTIFICATION_KEY = "school-calendar-notifications-v1";
 const SUBJECT_COLORS_KEY = "school-calendar-subject-colors-v1";
 const NOTIFICATION_SOUNDS_KEY = "school-calendar-notification-sounds-v1";
 const REMINDER_DEFAULTS_KEY = "school-calendar-reminder-defaults-v1";
-const SUBJECTS_KEY = "school-calendar-subjects-v1";
 const DEFAULT_NOTIFICATION_SOUNDS: Record<NotificationSound, string> = { homework: "homework_soft.wav", exam: "exam_alert.wav" };
 const DEFAULT_REMINDER_DEFAULTS: ReminderDefaults = { homework: 60, exam: 1440 };
-const DEFAULT_SUBJECT_COLORS: Record<string, string> = { "رياضيات": "#2878C8", "عربي": "#E26B45", "علوم": "#0F8C7D", "إنجليزي": "#8559B4", "اجتماعيات": "#C04A75", "نشاط": "#D28A24" };
+const DEFAULT_SUBJECT_COLORS: Record<string, string> = {};
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -90,17 +89,7 @@ export function startOfWeek(date: Date) {
 }
 
 function seedEvents(): CalendarEvent[] {
-  const today = new Date();
-  const monday = startOfWeek(today);
-  const date = (offset: number) => toDateKey(addDays(monday, offset));
-  return [
-    { id: "seed-1", title: "الرياضيات", subject: "رياضيات", date: date(0), time: "08:00", type: "lesson", done: false, reminderMinutes: 15, repeatWeekly: true },
-    { id: "seed-2", title: "اللغة العربية", subject: "عربي", date: date(1), time: "09:00", type: "lesson", done: false, reminderMinutes: 15, repeatWeekly: true },
-    { id: "seed-3", title: "تسليم بحث الطاقة", subject: "علوم", date: date(2), time: "12:00", type: "homework", done: false, reminderMinutes: 60 },
-    { id: "seed-4", title: "اختبار الوحدة الأولى", subject: "إنجليزي", date: date(3), time: "10:00", type: "exam", done: false, reminderMinutes: 1440 },
-    { id: "seed-5", title: "مراجعة الدرس 4", subject: "اجتماعيات", date: date(4), time: "16:30", type: "evaluation", done: false, reminderMinutes: 30 },
-    { id: "seed-6", title: "نشاط نادي العلوم", subject: "نشاط", date: date(5), time: "11:30", type: "activity", done: false, reminderMinutes: 60 },
-  ];
+  return [];
 }
 
 async function persist(events: CalendarEvent[]) {
