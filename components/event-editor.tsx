@@ -79,7 +79,7 @@ export function EventEditor({
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <KeyboardAvoidingView style={styles.overlay} behavior={Platform.OS === "ios" ? "padding" : "height"} keyboardVerticalOffset={Platform.OS === "ios" ? 8 : 0}>
         <View style={styles.sheet}>
           <View style={styles.sheetHeader}>
             <Pressable onPress={onClose} style={styles.iconButton}>
@@ -90,7 +90,7 @@ export function EventEditor({
               <Text style={styles.sheetSubtitle}>احفظه على جهازك ليبقى متاحًا بلا إنترنت</Text>
             </View>
           </View>
-          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+          <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" automaticallyAdjustKeyboardInsets>
             <Text style={styles.label}>العنوان</Text>
             <TextInput value={title} onChangeText={setTitle} placeholder="مثال: مراجعة درس الكسور" placeholderTextColor="#AAB5BF" style={styles.input} textAlign="right" autoFocus />
 
