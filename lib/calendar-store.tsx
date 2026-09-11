@@ -2,6 +2,9 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Platform } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
+import * as Sharing from "expo-sharing";
+import * as DocumentPicker from "expo-document-picker";
 import { notificationSoundForType } from "@/lib/calendar-utils";
 
 export type EventType = "lesson" | "homework" | "exam" | "evaluation" | "activity";
@@ -41,7 +44,11 @@ type CalendarContextValue = {
   setReminderDefault: (kind: keyof ReminderDefaults, minutes: number) => Promise<void>;
   addSubject: (subject: string, color: string) => Promise<void>;
   removeSubject: (subject: string) => Promise<void>;
+  exportData: () => Promise<void>;
+  importData: () => Promise<{ imported: boolean; message: string }>;
 };
+
+type TransferData = { format: "school-calendar"; version: 1; exportedAt: string; events: CalendarEvent[]; subjectColors: Record<string, string>; reminderDefaults: ReminderDefaults };
 
 const STORAGE_KEY = "school-calendar-events-v1";
 const NOTIFICATION_KEY = "school-calendar-notifications-v1";
@@ -238,7 +245,32 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const addSubject = async (subject: string, color: string) => { const next = { ...subjectColors, [subject]: color }; setSubjectColors(next); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(next)); };
   const removeSubject = async (subject: string) => { if (Object.keys(DEFAULT_SUBJECT_COLORS).includes(subject)) return; const next = { ...subjectColors }; delete next[subject]; setSubjectColors(next); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(next)); };
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, addSubject, removeSubject }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults]);
+  const exportData = async () => {
+    const portableEvents = events.map(({ notificationId: _notificationId, ...event }) => event);
+    const payload: TransferData = { format: "school-calendar", version: 1, exportedAt: new Date().toISOString(), events: portableEvents, subjectColors, reminderDefaults };
+    const uri = `${FileSystem.cacheDirectory}school-calendar-${Date.now()}.json`;
+    await FileSystem.writeAsStringAsync(uri, JSON.stringify(payload, null, 2), { encoding: FileSystem.EncodingType.UTF8 });
+    if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "application/json", dialogTitle: "تصدير روزنامتي الدراسية" });
+  };
+
+  const importData = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: "application/json", copyToCacheDirectory: true });
+    if (result.canceled) return { imported: false, message: "تم إلغاء الاستيراد" };
+    try {
+      const raw = await FileSystem.readAsStringAsync(result.assets[0].uri, { encoding: FileSystem.EncodingType.UTF8 });
+      const parsed = JSON.parse(raw) as Partial<TransferData>;
+      if (parsed.format !== "school-calendar" || parsed.version !== 1 || !Array.isArray(parsed.events) || !parsed.subjectColors || typeof parsed.subjectColors !== "object") return { imported: false, message: "الملف غير صالح أو ليس ملف روزنامة" };
+      const nextColors = parsed.subjectColors as Record<string, string>;
+      const validEvents = parsed.events.every((event) => event && typeof event === "object" && typeof event.id === "string" && typeof event.title === "string" && typeof event.subject === "string" && typeof event.date === "string" && typeof event.time === "string" && typeof event.type === "string" && typeof event.done === "boolean" && typeof event.reminderMinutes === "number");
+      if (!validEvents || Object.keys(nextColors).some((name) => typeof name !== "string" || typeof nextColors[name] !== "string")) return { imported: false, message: "يحتوي الملف على موعد أو مادة غير صالحة" };
+      const nextEvents = parsed.events as CalendarEvent[];
+      setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(parsed.reminderDefaults);
+      await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
+      return { imported: true, message: `تم استيراد ${nextEvents.length} موعدًا و${Object.keys(nextColors).length} مادة` };
+    } catch { return { imported: false, message: "تعذر قراءة ملف الاستيراد" }; }
+  };
+
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, addSubject, removeSubject, exportData, importData }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 
