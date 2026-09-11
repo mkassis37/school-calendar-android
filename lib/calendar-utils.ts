@@ -30,21 +30,6 @@ export function notificationSoundForType(type: EventType, sounds: { homework: st
   return type === "exam" ? sounds.exam : sounds.homework;
 }
 
-export type SecurityScanResult = { safe: boolean; checked: number; invalid: number; message: string };
-
-export function inspectCalendarData(events: unknown): SecurityScanResult {
-  if (!Array.isArray(events)) return { safe: false, checked: 0, invalid: 1, message: "بيانات التقويم غير صالحة" };
-  let invalid = 0;
-  for (const event of events) {
-    if (!event || typeof event !== "object") { invalid += 1; continue; }
-    const item = event as Record<string, unknown>;
-    const validType = ["lesson", "homework", "exam", "evaluation", "activity"].includes(String(item.type));
-    const validText = ["id", "title", "subject", "date", "time"].every((key) => typeof item[key] === "string" && String(item[key]).length <= 500);
-    const validReminder = typeof item.reminderMinutes === "number" && Number.isFinite(item.reminderMinutes) && item.reminderMinutes >= 0 && item.reminderMinutes <= 10080;
-    if (!validType || !validText || !validReminder || typeof item.done !== "boolean") invalid += 1;
-  }
-  return { safe: invalid === 0, checked: events.length, invalid, message: invalid === 0 ? "لم يتم العثور على بيانات غير سليمة" : `تم العثور على ${invalid} عنصر غير سليم` };
-}
 
 export function weeklyStudySummary(events: Array<{ date: string; type: EventType; done: boolean }>, referenceDate = new Date()) {
   const weekStart = startOfWeek(referenceDate);

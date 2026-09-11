@@ -2,7 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Platform } from "react-native";
-import { inspectCalendarData, notificationSoundForType, type SecurityScanResult } from "@/lib/calendar-utils";
+import { notificationSoundForType } from "@/lib/calendar-utils";
 
 export type EventType = "lesson" | "homework" | "exam" | "evaluation" | "activity";
 export type NotificationSound = "homework" | "exam";
@@ -39,7 +39,8 @@ type CalendarContextValue = {
   setSubjectColor: (subject: string, color: string) => Promise<void>;
   setNotificationSound: (kind: NotificationSound, sound: string) => Promise<void>;
   setReminderDefault: (kind: keyof ReminderDefaults, minutes: number) => Promise<void>;
-  runSecurityScan: () => SecurityScanResult;
+  addSubject: (subject: string, color: string) => Promise<void>;
+  removeSubject: (subject: string) => Promise<void>;
 };
 
 const STORAGE_KEY = "school-calendar-events-v1";
@@ -47,6 +48,7 @@ const NOTIFICATION_KEY = "school-calendar-notifications-v1";
 const SUBJECT_COLORS_KEY = "school-calendar-subject-colors-v1";
 const NOTIFICATION_SOUNDS_KEY = "school-calendar-notification-sounds-v1";
 const REMINDER_DEFAULTS_KEY = "school-calendar-reminder-defaults-v1";
+const SUBJECTS_KEY = "school-calendar-subjects-v1";
 const DEFAULT_NOTIFICATION_SOUNDS: Record<NotificationSound, string> = { homework: "homework_soft.wav", exam: "exam_alert.wav" };
 const DEFAULT_REMINDER_DEFAULTS: ReminderDefaults = { homework: 60, exam: 1440 };
 const DEFAULT_SUBJECT_COLORS: Record<string, string> = { "رياضيات": "#2878C8", "عربي": "#E26B45", "علوم": "#0F8C7D", "إنجليزي": "#8559B4", "اجتماعيات": "#C04A75", "نشاط": "#D28A24" };
@@ -244,9 +246,10 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(next));
   };
 
-  const runSecurityScan = () => inspectCalendarData(events);
+  const addSubject = async (subject: string, color: string) => { const next = { ...subjectColors, [subject]: color }; setSubjectColors(next); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(next)); };
+  const removeSubject = async (subject: string) => { if (Object.keys(DEFAULT_SUBJECT_COLORS).includes(subject)) return; const next = { ...subjectColors }; delete next[subject]; setSubjectColors(next); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(next)); };
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, runSecurityScan }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults]);
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, addSubject, removeSubject }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 
