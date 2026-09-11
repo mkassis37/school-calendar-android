@@ -45,7 +45,10 @@ type CalendarContextValue = {
   addSubject: (subject: string, color: string) => Promise<void>;
   removeSubject: (subject: string) => Promise<void>;
   exportData: () => Promise<void>;
-  importData: () => Promise<{ imported: boolean; message: string }>;
+  importData: (confirmReplacement: () => Promise<boolean>) => Promise<{ imported: boolean; message: string }>;
+  alarmEnabled: boolean;
+  alarmTime: string;
+  setDailyAlarm: (enabled: boolean, time: string) => Promise<void>;
 };
 
 type TransferData = { format: "school-calendar"; version: 1; exportedAt: string; events: CalendarEvent[]; subjectColors: Record<string, string>; reminderDefaults: ReminderDefaults };
@@ -55,6 +58,8 @@ const NOTIFICATION_KEY = "school-calendar-notifications-v1";
 const SUBJECT_COLORS_KEY = "school-calendar-subject-colors-v1";
 const NOTIFICATION_SOUNDS_KEY = "school-calendar-notification-sounds-v1";
 const REMINDER_DEFAULTS_KEY = "school-calendar-reminder-defaults-v1";
+const ALARM_KEY = "school-calendar-alarm-v1";
+const ALARM_TIME_KEY = "school-calendar-alarm-time-v1";
 const DEFAULT_NOTIFICATION_SOUNDS: Record<NotificationSound, string> = { homework: "homework_soft.wav", exam: "exam_alert.wav" };
 const DEFAULT_REMINDER_DEFAULTS: ReminderDefaults = { homework: 60, exam: 1440 };
 const DEFAULT_SUBJECT_COLORS: Record<string, string> = {};
@@ -143,21 +148,26 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [subjectColors, setSubjectColors] = useState<Record<string, string>>(DEFAULT_SUBJECT_COLORS);
   const [notificationSounds, setNotificationSounds] = useState<Record<NotificationSound, string>>(DEFAULT_NOTIFICATION_SOUNDS);
   const [reminderDefaults, setReminderDefaults] = useState<ReminderDefaults>(DEFAULT_REMINDER_DEFAULTS);
+  const [alarmEnabled, setAlarmEnabled] = useState(false);
+  const [alarmTime, setAlarmTime] = useState("07:00");
 
   useEffect(() => {
     void (async () => {
-      const [storedEvents, storedNotifications, storedSubjectColors, storedNotificationSounds, storedReminderDefaults] = await Promise.all([
+      const [storedEvents, storedNotifications, storedSubjectColors, storedNotificationSounds, storedReminderDefaults, storedAlarm, storedAlarmTime] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEY),
         AsyncStorage.getItem(NOTIFICATION_KEY),
         AsyncStorage.getItem(SUBJECT_COLORS_KEY),
         AsyncStorage.getItem(NOTIFICATION_SOUNDS_KEY),
         AsyncStorage.getItem(REMINDER_DEFAULTS_KEY),
+        AsyncStorage.getItem(ALARM_KEY),
+        AsyncStorage.getItem(ALARM_TIME_KEY),
       ]);
       setEvents(storedEvents ? JSON.parse(storedEvents) : seedEvents());
       setNotificationsEnabled(storedNotifications === "true");
       setSubjectColors(storedSubjectColors ? { ...DEFAULT_SUBJECT_COLORS, ...JSON.parse(storedSubjectColors) } : DEFAULT_SUBJECT_COLORS);
       setNotificationSounds(storedNotificationSounds ? { ...DEFAULT_NOTIFICATION_SOUNDS, ...JSON.parse(storedNotificationSounds) } : DEFAULT_NOTIFICATION_SOUNDS);
       setReminderDefaults(storedReminderDefaults ? { ...DEFAULT_REMINDER_DEFAULTS, ...JSON.parse(storedReminderDefaults) } : DEFAULT_REMINDER_DEFAULTS);
+      setAlarmEnabled(storedAlarm === "true"); setAlarmTime(storedAlarmTime ?? "07:00");
       setHydrated(true);
     })();
   }, []);
@@ -253,7 +263,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "application/json", dialogTitle: "تصدير روزنامتي الدراسية" });
   };
 
-  const importData = async () => {
+  const importData = async (confirmReplacement: () => Promise<boolean>) => {
     const result = await DocumentPicker.getDocumentAsync({ type: "application/json", copyToCacheDirectory: true });
     if (result.canceled) return { imported: false, message: "تم إلغاء الاستيراد" };
     try {
@@ -264,13 +274,27 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       const validEvents = parsed.events.every((event) => event && typeof event === "object" && typeof event.id === "string" && typeof event.title === "string" && typeof event.subject === "string" && typeof event.date === "string" && typeof event.time === "string" && typeof event.type === "string" && typeof event.done === "boolean" && typeof event.reminderMinutes === "number");
       if (!validEvents || Object.keys(nextColors).some((name) => typeof name !== "string" || typeof nextColors[name] !== "string")) return { imported: false, message: "يحتوي الملف على موعد أو مادة غير صالحة" };
       const nextEvents = parsed.events as CalendarEvent[];
+      if (!(await confirmReplacement())) return { imported: false, message: "تم إلغاء الاستيراد" };
       setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(parsed.reminderDefaults);
       await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
       return { imported: true, message: `تم استيراد ${nextEvents.length} موعدًا و${Object.keys(nextColors).length} مادة` };
     } catch { return { imported: false, message: "تعذر قراءة ملف الاستيراد" }; }
   };
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, addSubject, removeSubject, exportData, importData }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults]);
+  const setDailyAlarm = async (enabled: boolean, time: string) => {
+    const [hour, minute] = time.split(":").map(Number);
+    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return;
+    if (Platform.OS !== "web") {
+      const existing = await AsyncStorage.getItem(ALARM_KEY);
+      if (existing) { try { await Notifications.cancelScheduledNotificationAsync(existing); } catch {} }
+      let notificationId: string | undefined;
+      if (enabled) notificationId = await Notifications.scheduleNotificationAsync({ content: { title: "منبه الدراسة", body: "حان وقت المنبه الدراسي" }, trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute } });
+      await AsyncStorage.setItem(ALARM_KEY, notificationId ?? "");
+    }
+    setAlarmEnabled(enabled); setAlarmTime(time); await AsyncStorage.setItem(ALARM_TIME_KEY, time);
+  };
+
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, alarmEnabled, alarmTime]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 
