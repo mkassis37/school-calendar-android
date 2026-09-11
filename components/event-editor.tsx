@@ -122,8 +122,7 @@ export function EventEditor({
               </View>
             </View>
 
-            <Text style={styles.label}>التنبيه لهذا الموعد</Text>
-            <Text style={styles.reminderHint}>هذا الاختيار خاص بهذا الواجب أو الامتحان ولا يغيّر الإعداد الافتراضي.</Text>
+            <Text style={styles.label}>التنبيه قبل الموعد بالدقائق</Text>
             <View style={styles.reminderRow}>
               {[0, 15, 30, 60, 1440].map((value) => (
                 <Pressable key={value} onPress={() => setReminderMinutes(String(value))} style={[styles.reminderPill, Number(reminderMinutes) === value && styles.reminderPillActive]}>
@@ -131,7 +130,6 @@ export function EventEditor({
                 </Pressable>
               ))}
             </View>
-            <TextInput value={reminderMinutes} onChangeText={(value) => setReminderMinutes(value.replace(/[^0-9]/g, ""))} placeholder="دقائق مخصصة" placeholderTextColor="#AAB5BF" style={styles.customReminder} textAlign="right" keyboardType="number-pad" />
 
             <Pressable onPress={() => setRepeatWeekly((value) => !value)} style={styles.repeatRow}>
               <View style={[styles.repeatCheck, repeatWeekly && styles.repeatCheckActive]}>{repeatWeekly && <IconSymbol name="check" size={14} color={PALETTE.white} />}</View>
@@ -174,8 +172,6 @@ const styles = StyleSheet.create({
   reminderPillActive: { backgroundColor: "#E5F6F2", borderColor: PALETTE.teal },
   reminderText: { color: PALETTE.muted, fontSize: 12, fontWeight: "700" },
   reminderTextActive: { color: PALETTE.teal },
-  reminderHint: { color: PALETTE.muted, fontSize: 10, textAlign: "right", marginTop: -3, marginBottom: 7 },
-  customReminder: { minHeight: 42, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, paddingHorizontal: 12, color: PALETTE.ink, fontSize: 13, backgroundColor: "#FBFCFE", marginTop: 8 },
   repeatRow: { flexDirection: "row-reverse", alignItems: "center", gap: 10, marginTop: 18, padding: 12, borderRadius: 14, backgroundColor: "#F1FAF8", borderWidth: 1, borderColor: "#D6F0EB" },
   repeatCheck: { width: 22, height: 22, borderRadius: 7, borderWidth: 1.5, borderColor: "#B8C8CC", alignItems: "center", justifyContent: "center" },
   repeatCheckActive: { backgroundColor: PALETTE.teal, borderColor: PALETTE.teal },

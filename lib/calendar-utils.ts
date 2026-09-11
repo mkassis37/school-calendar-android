@@ -30,17 +30,6 @@ export function notificationSoundForType(type: EventType, sounds: { homework: st
   return type === "exam" ? sounds.exam : sounds.homework;
 }
 
-export function weeklyStudySummary(events: Array<{ date: string; type: EventType; done: boolean }>, referenceDate = new Date()) {
-  const weekStart = startOfWeek(referenceDate);
-  const weekKeys = new Set(Array.from({ length: 7 }, (_, index) => toDateKey(addDays(weekStart, index))));
-  const current = events.filter((event) => weekKeys.has(event.date) && (event.type === "homework" || event.type === "exam"));
-  const homeworkTotal = current.filter((event) => event.type === "homework").length;
-  const homeworkDone = current.filter((event) => event.type === "homework" && event.done).length;
-  const examTotal = current.filter((event) => event.type === "exam").length;
-  const examDone = current.filter((event) => event.type === "exam" && event.done).length;
-  return { homeworkTotal, homeworkDone, homeworkPercent: homeworkProgress(homeworkTotal, homeworkDone), examTotal, examDone, examPercent: homeworkProgress(examTotal, examDone), total: current.length, done: current.filter((event) => event.done).length };
-}
-
 export const EVENT_META: Record<EventType, { label: string; color: string; soft: string; icon: string }> = {
   lesson: { label: "درس", color: "#2878C8", soft: "#E7F0FB", icon: "menu-book" },
   homework: { label: "واجب", color: "#E26B45", soft: "#FFF0EB", icon: "assignment" },
