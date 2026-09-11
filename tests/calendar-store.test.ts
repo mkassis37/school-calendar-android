@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, EVENT_META, homeworkProgress, startOfWeek, toDateKey } from "../lib/calendar-utils";
+import { addDays, EVENT_META, homeworkProgress, notificationSoundForType, startOfWeek, toDateKey } from "../lib/calendar-utils";
 
 describe("calendar helpers", () => {
   it("formats a local date as an ISO calendar key", () => {
@@ -28,5 +28,11 @@ describe("calendar helpers", () => {
     expect(homeworkProgress(4, 1)).toBe(25);
     expect(homeworkProgress(0, 0)).toBe(0);
     expect(homeworkProgress(4, 9)).toBe(100);
+  });
+
+  it("selects different notification sounds for homework and exams", () => {
+    const sounds = { homework: "homework-soft.wav", exam: "exam-alert.wav" };
+    expect(notificationSoundForType("homework", sounds)).toBe("homework-soft.wav");
+    expect(notificationSoundForType("exam", sounds)).toBe("exam-alert.wav");
   });
 });

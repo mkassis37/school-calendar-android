@@ -2,8 +2,10 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Platform } from "react-native";
+import { notificationSoundForType } from "@/lib/calendar-utils";
 
 export type EventType = "lesson" | "homework" | "exam" | "evaluation" | "activity";
+export type NotificationSound = "homework" | "exam";
 
 export type CalendarEvent = {
   id: string;
@@ -26,17 +28,21 @@ type CalendarContextValue = {
   hydrated: boolean;
   notificationsEnabled: boolean;
   subjectColors: Record<string, string>;
+  notificationSounds: Record<NotificationSound, string>;
   addEvent: (event: NewEvent) => Promise<void>;
   updateEvent: (id: string, event: NewEvent) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
   toggleEvent: (id: string) => Promise<void>;
   requestNotifications: () => Promise<boolean>;
   setSubjectColor: (subject: string, color: string) => Promise<void>;
+  setNotificationSound: (kind: NotificationSound, sound: string) => Promise<void>;
 };
 
 const STORAGE_KEY = "school-calendar-events-v1";
 const NOTIFICATION_KEY = "school-calendar-notifications-v1";
 const SUBJECT_COLORS_KEY = "school-calendar-subject-colors-v1";
+const NOTIFICATION_SOUNDS_KEY = "school-calendar-notification-sounds-v1";
+const DEFAULT_NOTIFICATION_SOUNDS: Record<NotificationSound, string> = { homework: "homework-soft.wav", exam: "exam-alert.wav" };
 const DEFAULT_SUBJECT_COLORS: Record<string, string> = { "رياضيات": "#2878C8", "عربي": "#E26B45", "علوم": "#0F8C7D", "إنجليزي": "#8559B4", "اجتماعيات": "#C04A75", "نشاط": "#D28A24" };
 
 Notifications.setNotificationHandler({
@@ -93,7 +99,7 @@ async function persist(events: CalendarEvent[]) {
   await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(events));
 }
 
-async function scheduleEventReminder(event: CalendarEvent) {
+async function scheduleEventReminder(event: CalendarEvent, notificationSounds = DEFAULT_NOTIFICATION_SOUNDS) {
   if (Platform.OS === "web" || event.reminderMinutes <= 0) return undefined;
   const [hours, minutes] = event.time.split(":").map(Number);
   const eventDate = parseDateKey(event.date);
@@ -105,9 +111,10 @@ async function scheduleEventReminder(event: CalendarEvent) {
       content: {
         title: `تذكير: ${event.title}`,
         body: `${event.subject} · بعد ${event.reminderMinutes >= 60 ? `${event.reminderMinutes / 60} ساعة` : `${event.reminderMinutes} دقيقة`}`,
-        data: { eventId: event.id },
+        sound: notificationSoundForType(event.type, notificationSounds),
+        data: { eventId: event.id, eventType: event.type },
       },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: triggerDate },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: triggerDate, channelId: event.type === "exam" ? "school-calendar-exam" : "school-calendar-homework" },
     });
   } catch {
     return undefined;
@@ -130,17 +137,20 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [hydrated, setHydrated] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const [subjectColors, setSubjectColors] = useState<Record<string, string>>(DEFAULT_SUBJECT_COLORS);
+  const [notificationSounds, setNotificationSounds] = useState<Record<NotificationSound, string>>(DEFAULT_NOTIFICATION_SOUNDS);
 
   useEffect(() => {
     void (async () => {
-      const [storedEvents, storedNotifications, storedSubjectColors] = await Promise.all([
+      const [storedEvents, storedNotifications, storedSubjectColors, storedNotificationSounds] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEY),
         AsyncStorage.getItem(NOTIFICATION_KEY),
         AsyncStorage.getItem(SUBJECT_COLORS_KEY),
+        AsyncStorage.getItem(NOTIFICATION_SOUNDS_KEY),
       ]);
       setEvents(storedEvents ? JSON.parse(storedEvents) : seedEvents());
       setNotificationsEnabled(storedNotifications === "true");
       setSubjectColors(storedSubjectColors ? { ...DEFAULT_SUBJECT_COLORS, ...JSON.parse(storedSubjectColors) } : DEFAULT_SUBJECT_COLORS);
+      setNotificationSounds(storedNotificationSounds ? { ...DEFAULT_NOTIFICATION_SOUNDS, ...JSON.parse(storedNotificationSounds) } : DEFAULT_NOTIFICATION_SOUNDS);
       setHydrated(true);
     })();
   }, []);
@@ -150,7 +160,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     const created: CalendarEvent[] = [];
     for (const instance of instances) {
       const event: CalendarEvent = { ...instance, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, done: false };
-      if (notificationsEnabled) event.notificationId = await scheduleEventReminder(event);
+      if (notificationsEnabled) event.notificationId = await scheduleEventReminder(event, notificationSounds);
       created.push(event);
     }
     const next = [...events, ...created];
@@ -162,7 +172,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     const current = events.find((event) => event.id === id);
     if (!current) return;
     await cancelReminder(current.notificationId);
-    const updated: CalendarEvent = { ...current, ...input, notificationId: notificationsEnabled ? await scheduleEventReminder({ ...current, ...input }) : undefined };
+    const updated: CalendarEvent = { ...current, ...input, notificationId: notificationsEnabled ? await scheduleEventReminder({ ...current, ...input }, notificationSounds) : undefined };
     const next = events.map((event) => (event.id === id ? updated : event));
     setEvents(next);
     await persist(next);
@@ -191,6 +201,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         vibrationPattern: [0, 250, 250, 250],
         lightColor: "#1AA394",
       });
+      await Notifications.setNotificationChannelAsync("school-calendar-homework", { name: "تنبيهات الواجبات", importance: Notifications.AndroidImportance.HIGH, sound: notificationSounds.homework });
+      await Notifications.setNotificationChannelAsync("school-calendar-exam", { name: "تنبيهات الامتحانات", importance: Notifications.AndroidImportance.HIGH, sound: notificationSounds.exam });
     }
     const current = await Notifications.getPermissionsAsync();
     const result = current.status === "granted" ? current : await Notifications.requestPermissionsAsync();
@@ -198,7 +210,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     setNotificationsEnabled(enabled);
     await AsyncStorage.setItem(NOTIFICATION_KEY, String(enabled));
     if (enabled) {
-      const refreshed = await Promise.all(events.map(async (event) => ({ ...event, notificationId: await scheduleEventReminder(event) })));
+      const refreshed = await Promise.all(events.map(async (event) => ({ ...event, notificationId: await scheduleEventReminder(event, notificationSounds) })));
       setEvents(refreshed);
       await persist(refreshed);
     }
@@ -211,7 +223,13 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(next));
   };
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor }), [events, hydrated, notificationsEnabled, subjectColors]);
+  const setNotificationSound = async (kind: NotificationSound, sound: string) => {
+    const next = { ...notificationSounds, [kind]: sound };
+    setNotificationSounds(next);
+    await AsyncStorage.setItem(NOTIFICATION_SOUNDS_KEY, JSON.stringify(next));
+  };
+
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 
