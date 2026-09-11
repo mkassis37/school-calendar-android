@@ -42,7 +42,7 @@ const STORAGE_KEY = "school-calendar-events-v1";
 const NOTIFICATION_KEY = "school-calendar-notifications-v1";
 const SUBJECT_COLORS_KEY = "school-calendar-subject-colors-v1";
 const NOTIFICATION_SOUNDS_KEY = "school-calendar-notification-sounds-v1";
-const DEFAULT_NOTIFICATION_SOUNDS: Record<NotificationSound, string> = { homework: "homework-soft.wav", exam: "exam-alert.wav" };
+const DEFAULT_NOTIFICATION_SOUNDS: Record<NotificationSound, string> = { homework: "homework_soft.wav", exam: "exam_alert.wav" };
 const DEFAULT_SUBJECT_COLORS: Record<string, string> = { "رياضيات": "#2878C8", "عربي": "#E26B45", "علوم": "#0F8C7D", "إنجليزي": "#8559B4", "اجتماعيات": "#C04A75", "نشاط": "#D28A24" };
 
 Notifications.setNotificationHandler({

@@ -91,7 +91,7 @@ const config: ExpoConfig = {
       {
         icon: "./assets/images/icon.png",
         color: "#1AA394",
-        sounds: ["./assets/sounds/homework-soft.wav", "./assets/sounds/exam-alert.wav"],
+        sounds: ["./assets/sounds/homework_soft.wav", "./assets/sounds/exam_alert.wav"],
       },
     ],
     [

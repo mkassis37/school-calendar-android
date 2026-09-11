@@ -31,8 +31,8 @@ describe("calendar helpers", () => {
   });
 
   it("selects different notification sounds for homework and exams", () => {
-    const sounds = { homework: "homework-soft.wav", exam: "exam-alert.wav" };
-    expect(notificationSoundForType("homework", sounds)).toBe("homework-soft.wav");
-    expect(notificationSoundForType("exam", sounds)).toBe("exam-alert.wav");
+    const sounds = { homework: "homework_soft.wav", exam: "exam_alert.wav" };
+    expect(notificationSoundForType("homework", sounds)).toBe("homework_soft.wav");
+    expect(notificationSoundForType("exam", sounds)).toBe("exam_alert.wav");
   });
 });

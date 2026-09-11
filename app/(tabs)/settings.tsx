@@ -6,7 +6,7 @@ import { useCalendar } from "@/lib/calendar-store";
 
 const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2" };
 const subjects = [{ name: "رياضيات", color: "#2878C8" }, { name: "عربي", color: "#E26B45" }, { name: "علوم", color: "#0F8C7D" }, { name: "إنجليزي", color: "#8559B4" }];
-const soundOptions = [{ value: "homework-soft.wav", label: "نغمة هادئة" }, { value: "exam-alert.wav", label: "نغمة تنبيه قوية" }];
+const soundOptions = [{ value: "homework_soft.wav", label: "نغمة هادئة" }, { value: "exam_alert.wav", label: "نغمة تنبيه قوية" }];
 
 export default function SettingsScreen() {
   const { notificationsEnabled, requestNotifications, subjectColors, setSubjectColor, notificationSounds, setNotificationSound } = useCalendar();
