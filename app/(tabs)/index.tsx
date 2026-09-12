@@ -8,7 +8,7 @@ import { addDays, arabicNumber, ARABIC_MONTHS, EVENT_META, formatArabicDate, for
 const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2", soft: "#EDF8F6", amber: "#D28A24" };
 
 export default function CalendarScreen() {
-  const { events, hydrated, subjectColors, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent } = useCalendar();
+  const { events, hydrated, subjectColors, reminderDefaults, timeFormat, addEvent, updateEvent, deleteEvent, toggleEvent } = useCalendar();
   const [selectedDate, setSelectedDate] = useState(toDateKey(new Date()));
   const [monthAnchor, setMonthAnchor] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [editorVisible, setEditorVisible] = useState(false);
@@ -65,7 +65,7 @@ export default function CalendarScreen() {
 
         <View style={styles.progressCard}><View style={styles.progressTop}><Text style={styles.progressTitle}>تقدّمك هذا الأسبوع</Text><Text style={styles.progressValue}>{arabicNumber(completedCount)} / {arabicNumber(events.length)} مكتمل</Text></View><View style={styles.progressTrack}><View style={[styles.progressFill, { width: `${events.length ? Math.max(4, (completedCount / events.length) * 100) : 0}%` }]} /></View></View>
       </View>
-      <EventEditor visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={selectedDate} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); const date = parseDateKey(value.date); setSelectedDate(value.date); setMonthAnchor(new Date(date.getFullYear(), date.getMonth(), 1)); setEditorVisible(false); }} />
+      <EventEditor preferredTimeFormat={timeFormat} visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={selectedDate} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); const date = parseDateKey(value.date); setSelectedDate(value.date); setMonthAnchor(new Date(date.getFullYear(), date.getMonth(), 1)); setEditorVisible(false); }} />
       <EventDetails event={detailsEvent} onClose={() => setDetailsEvent(null)} />
     </ScreenContainer>
   );

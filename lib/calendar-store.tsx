@@ -49,6 +49,8 @@ type CalendarContextValue = {
   alarmEnabled: boolean;
   alarmTime: string;
   setDailyAlarm: (enabled: boolean, time: string) => Promise<void>;
+  timeFormat: 12 | 24;
+  setTimeFormat: (format: 12 | 24) => Promise<void>;
 };
 
 type TransferData = { format: "school-calendar"; version: 1; exportedAt: string; events: CalendarEvent[]; subjectColors: Record<string, string>; reminderDefaults: ReminderDefaults };
@@ -60,6 +62,7 @@ const NOTIFICATION_SOUNDS_KEY = "school-calendar-notification-sounds-v1";
 const REMINDER_DEFAULTS_KEY = "school-calendar-reminder-defaults-v1";
 const ALARM_KEY = "school-calendar-alarm-v1";
 const ALARM_TIME_KEY = "school-calendar-alarm-time-v1";
+const TIME_FORMAT_KEY = "school-calendar-time-format-v1";
 const DEFAULT_NOTIFICATION_SOUNDS: Record<NotificationSound, string> = { homework: "homework_soft.wav", exam: "exam_alert.wav" };
 const DEFAULT_REMINDER_DEFAULTS: ReminderDefaults = { homework: 60, exam: 1440 };
 const DEFAULT_SUBJECT_COLORS: Record<string, string> = {};
@@ -150,10 +153,11 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [reminderDefaults, setReminderDefaults] = useState<ReminderDefaults>(DEFAULT_REMINDER_DEFAULTS);
   const [alarmEnabled, setAlarmEnabled] = useState(false);
   const [alarmTime, setAlarmTime] = useState("07:00");
+  const [timeFormat, setTimeFormatState] = useState<12 | 24>(24);
 
   useEffect(() => {
     void (async () => {
-      const [storedEvents, storedNotifications, storedSubjectColors, storedNotificationSounds, storedReminderDefaults, storedAlarm, storedAlarmTime] = await Promise.all([
+      const [storedEvents, storedNotifications, storedSubjectColors, storedNotificationSounds, storedReminderDefaults, storedAlarm, storedAlarmTime, storedTimeFormat] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEY),
         AsyncStorage.getItem(NOTIFICATION_KEY),
         AsyncStorage.getItem(SUBJECT_COLORS_KEY),
@@ -161,6 +165,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         AsyncStorage.getItem(REMINDER_DEFAULTS_KEY),
         AsyncStorage.getItem(ALARM_KEY),
         AsyncStorage.getItem(ALARM_TIME_KEY),
+        AsyncStorage.getItem(TIME_FORMAT_KEY),
       ]);
       setEvents(storedEvents ? JSON.parse(storedEvents) : seedEvents());
       setNotificationsEnabled(storedNotifications === "true");
@@ -168,6 +173,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       setNotificationSounds(storedNotificationSounds ? { ...DEFAULT_NOTIFICATION_SOUNDS, ...JSON.parse(storedNotificationSounds) } : DEFAULT_NOTIFICATION_SOUNDS);
       setReminderDefaults(storedReminderDefaults ? { ...DEFAULT_REMINDER_DEFAULTS, ...JSON.parse(storedReminderDefaults) } : DEFAULT_REMINDER_DEFAULTS);
       setAlarmEnabled(storedAlarm === "true"); setAlarmTime(storedAlarmTime ?? "07:00");
+      setTimeFormatState(storedTimeFormat === "12" ? 12 : 24);
       setHydrated(true);
     })();
   }, []);
@@ -293,8 +299,9 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     }
     setAlarmEnabled(enabled); setAlarmTime(time); await AsyncStorage.setItem(ALARM_TIME_KEY, time);
   };
+  const setTimeFormat = async (format: 12 | 24) => { setTimeFormatState(format); await AsyncStorage.setItem(TIME_FORMAT_KEY, String(format)); };
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, alarmEnabled, alarmTime]);
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, timeFormat, setTimeFormat }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 

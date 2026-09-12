@@ -31,6 +31,7 @@ export function EventEditor({
   onClose,
   onSave,
   reminderDefaults,
+  preferredTimeFormat = 24,
 }: {
   visible: boolean;
   event?: CalendarEvent | null;
@@ -38,6 +39,7 @@ export function EventEditor({
   onClose: () => void;
   onSave: (value: NewEvent) => Promise<void>;
   reminderDefaults?: ReminderDefaults;
+  preferredTimeFormat?: 12 | 24;
 }) {
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
@@ -59,12 +61,13 @@ export function EventEditor({
     setSubject(event?.subject ?? "");
     setDate(event?.date ?? defaultDate);
     setTime(event?.time ?? "08:00");
+    setTimeFormat(preferredTimeFormat);
     const initialHour = Number((event?.time ?? "08:00").split(":")[0]); setPeriod(initialHour >= 12 ? "PM" : "AM");
     setType(event?.type ?? "lesson");
     setReminderMinutes(String(event?.reminderMinutes ?? (event?.type === "exam" ? reminderDefaults?.exam : event?.type === "homework" ? reminderDefaults?.homework : 15)));
     setNotes(event?.notes ?? "");
     setRepeatWeekly(event?.repeatWeekly ?? false);
-  }, [visible, event, defaultDate, reminderDefaults]);
+  }, [visible, event, defaultDate, reminderDefaults, preferredTimeFormat]);
 
   const save = async () => {
     if (!title.trim() || !date.match(/^\d{4}-\d{2}-\d{2}$/)) return;

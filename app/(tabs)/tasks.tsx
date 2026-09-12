@@ -10,7 +10,7 @@ const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC"
 const filters: Array<{ key: "all" | EventType; label: string }> = [{ key: "all", label: "الكل" }, { key: "homework", label: "الواجبات" }, { key: "exam", label: "الامتحانات" }, { key: "evaluation", label: "التقييمات" }, { key: "activity", label: "الأنشطة" }];
 
 export default function TasksScreen() {
-  const { events, addEvent, updateEvent, toggleEvent, reminderDefaults } = useCalendar();
+  const { events, addEvent, updateEvent, toggleEvent, reminderDefaults, timeFormat } = useCalendar();
   const [filter, setFilter] = useState<"all" | EventType>("all");
   const [showDone, setShowDone] = useState(true);
   const [editorVisible, setEditorVisible] = useState(false);
@@ -36,7 +36,7 @@ export default function TasksScreen() {
       <Pressable onPress={() => setShowDone((value) => !value)} style={styles.toggleDone}><View style={[styles.checkbox, showDone && styles.checkboxActive]}>{showDone && <IconSymbol name="check" size={13} color={C.white} />}</View><Text style={styles.toggleText}>إظهار المكتمل</Text></Pressable>
       <View style={styles.list}>{taskEvents.length ? taskEvents.map((item) => <TaskRow key={item.id} event={item} onToggle={() => void toggleEvent(item.id)} onEdit={() => { setEditingEvent(item); setEditorVisible(true); }} />) : <View style={styles.empty}><IconSymbol name="checklist" size={30} color={C.teal} /><Text style={styles.emptyTitle}>لا توجد مهام في هذا التصنيف</Text><Text style={styles.emptySub}>أضف واجبًا أو امتحانًا من زر +</Text></View>}</View>
     </ScrollView>
-    <EventEditor visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={editingEvent?.date ?? new Date().toISOString().slice(0, 10)} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); setEditorVisible(false); }} />
+    <EventEditor preferredTimeFormat={timeFormat} visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={editingEvent?.date ?? new Date().toISOString().slice(0, 10)} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); setEditorVisible(false); }} />
   </ScreenContainer>;
 }
 
