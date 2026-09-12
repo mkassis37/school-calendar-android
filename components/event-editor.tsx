@@ -49,6 +49,8 @@ export function EventEditor({
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [dateMenu, setDateMenu] = useState<"day" | "month" | "year" | null>(null);
   const [timeMenu, setTimeMenu] = useState<"hour" | "minute" | null>(null);
+  const [timeFormat, setTimeFormat] = useState<12 | 24>(24);
+  const [period, setPeriod] = useState<"AM" | "PM">("AM");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -57,6 +59,7 @@ export function EventEditor({
     setSubject(event?.subject ?? "");
     setDate(event?.date ?? defaultDate);
     setTime(event?.time ?? "08:00");
+    const initialHour = Number((event?.time ?? "08:00").split(":")[0]); setPeriod(initialHour >= 12 ? "PM" : "AM");
     setType(event?.type ?? "lesson");
     setReminderMinutes(String(event?.reminderMinutes ?? (event?.type === "exam" ? reminderDefaults?.exam : event?.type === "homework" ? reminderDefaults?.homework : 15)));
     setNotes(event?.notes ?? "");
@@ -91,12 +94,14 @@ export function EventEditor({
     setDate(`${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(Math.min(nextDay, maxDay)).padStart(2, "0")}`); setDateMenu(null);
   };
   const [timeHour, timeMinute] = time.split(":").map(Number);
-  const hours = Array.from({ length: 24 }, (_, index) => index);
+  const displayHour = timeFormat === 12 ? (timeHour % 12 || 12) : timeHour;
+  const hours = Array.from({ length: timeFormat === 12 ? 12 : 24 }, (_, index) => timeFormat === 12 ? index + 1 : index);
   const minutes = Array.from({ length: 60 }, (_, index) => index);
   const updateTimePart = (part: "hour" | "minute", value: number) => {
-    const hour = part === "hour" ? value : (timeHour || 0); const minute = part === "minute" ? value : (timeMinute || 0);
+    const hour = part === "hour" ? (timeFormat === 12 ? (value % 12) + (period === "PM" ? 12 : 0) : value) : (timeHour || 0); const minute = part === "minute" ? value : (timeMinute || 0);
     setTime(`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`); setTimeMenu(null);
   };
+  const changePeriod = (next: "AM" | "PM") => { const hour12 = timeHour % 12; const hour = hour12 + (next === "PM" ? 12 : 0); setPeriod(next); setTime(`${String(hour).padStart(2, "0")}:${String(timeMinute || 0).padStart(2, "0")}`); };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -135,7 +140,7 @@ export function EventEditor({
             <View style={styles.row}>
               <View style={styles.half}>
                 <Text style={styles.label}>الوقت</Text>
-                <View style={styles.timePickers}>{([["hour", "الساعة", timeHour, hours], ["minute", "الدقائق", timeMinute, minutes]] as const).map(([part, label, value, options]) => <View key={part} style={styles.timePickerWrap}><Pressable onPress={() => setTimeMenu(timeMenu === part ? null : part)} style={styles.timePicker}><Text style={styles.timePickerValue}>{String(value || 0).padStart(2, "0")}</Text><Text style={styles.timePickerLabel}>{label}</Text></Pressable>{timeMenu === part && <View style={styles.dropdown}>{options.map((option) => <Pressable key={option} onPress={() => updateTimePart(part, option)} style={styles.dropdownOption}><Text style={styles.dropdownText}>{String(option).padStart(2, "0")}</Text></Pressable>)}</View>}</View>)}</View>
+                <View style={styles.formatRow}><Pressable onPress={() => setTimeFormat(24)} style={[styles.formatPill, timeFormat === 24 && styles.formatPillActive]}><Text style={[styles.formatText, timeFormat === 24 && styles.formatTextActive]}>24 ساعة</Text></Pressable><Pressable onPress={() => setTimeFormat(12)} style={[styles.formatPill, timeFormat === 12 && styles.formatPillActive]}><Text style={[styles.formatText, timeFormat === 12 && styles.formatTextActive]}>12 ساعة</Text></Pressable></View><View style={styles.timePickers}>{([["hour", "الساعة", displayHour, hours], ["minute", "الدقائق", timeMinute, minutes]] as const).map(([part, label, value, options]) => <View key={part} style={styles.timePickerWrap}><Pressable onPress={() => setTimeMenu(timeMenu === part ? null : part)} style={styles.timePicker}><Text style={styles.timePickerValue}>{String(value || 0).padStart(2, "0")}</Text><Text style={styles.timePickerLabel}>{label}</Text></Pressable>{timeMenu === part && <View style={styles.dropdown}>{options.map((option) => <Pressable key={option} onPress={() => updateTimePart(part, option)} style={styles.dropdownOption}><Text style={styles.dropdownText}>{String(option).padStart(2, "0")}</Text></Pressable>)}</View>}</View>)}{timeFormat === 12 && <View style={styles.periodWrap}><Pressable onPress={() => changePeriod("AM")} style={[styles.periodPill, period === "AM" && styles.formatPillActive]}><Text style={[styles.formatText, period === "AM" && styles.formatTextActive]}>صباحًا</Text></Pressable><Pressable onPress={() => changePeriod("PM")} style={[styles.periodPill, period === "PM" && styles.formatPillActive]}><Text style={[styles.formatText, period === "PM" && styles.formatTextActive]}>مساءً</Text></Pressable></View>}</View>
               </View>
               <View style={styles.half}>
                 <Text style={styles.label}>التاريخ</Text>
@@ -201,6 +206,13 @@ const styles = StyleSheet.create({
   timePicker: { minHeight: 48, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, backgroundColor: "#FBFCFE", alignItems: "center", justifyContent: "center" },
   timePickerValue: { color: PALETTE.ink, fontSize: 15, fontWeight: "800" },
   timePickerLabel: { color: PALETTE.muted, fontSize: 9, marginTop: 2 },
+  formatRow: { flexDirection: "row-reverse", gap: 6, marginBottom: 6 },
+  formatPill: { flex: 1, paddingVertical: 7, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 9, alignItems: "center" },
+  formatPillActive: { backgroundColor: "#E5F6F2", borderColor: PALETTE.teal },
+  formatText: { color: PALETTE.muted, fontSize: 10, fontWeight: "800" },
+  formatTextActive: { color: PALETTE.teal },
+  periodWrap: { width: 76, gap: 5 },
+  periodPill: { flex: 1, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 9, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
   reminderRow: { flexDirection: "row-reverse", gap: 7 },
   reminderPill: { flex: 1, height: 38, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   reminderPillActive: { backgroundColor: "#E5F6F2", borderColor: PALETTE.teal },
