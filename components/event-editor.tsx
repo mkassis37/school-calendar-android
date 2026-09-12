@@ -48,6 +48,7 @@ export function EventEditor({
   const [notes, setNotes] = useState("");
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [dateMenu, setDateMenu] = useState<"day" | "month" | "year" | null>(null);
+  const [timeMenu, setTimeMenu] = useState<"hour" | "minute" | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -89,6 +90,13 @@ export function EventEditor({
     const maxDay = new Date(nextYear, nextMonth, 0).getDate();
     setDate(`${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(Math.min(nextDay, maxDay)).padStart(2, "0")}`); setDateMenu(null);
   };
+  const [timeHour, timeMinute] = time.split(":").map(Number);
+  const hours = Array.from({ length: 24 }, (_, index) => index);
+  const minutes = Array.from({ length: 60 }, (_, index) => index);
+  const updateTimePart = (part: "hour" | "minute", value: number) => {
+    const hour = part === "hour" ? value : (timeHour || 0); const minute = part === "minute" ? value : (timeMinute || 0);
+    setTime(`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`); setTimeMenu(null);
+  };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -127,7 +135,7 @@ export function EventEditor({
             <View style={styles.row}>
               <View style={styles.half}>
                 <Text style={styles.label}>الوقت</Text>
-                <TextInput value={time} onChangeText={setTime} placeholder="08:00" placeholderTextColor="#AAB5BF" style={styles.input} textAlign="right" keyboardType="numbers-and-punctuation" />
+                <View style={styles.timePickers}>{([["hour", "الساعة", timeHour, hours], ["minute", "الدقائق", timeMinute, minutes]] as const).map(([part, label, value, options]) => <View key={part} style={styles.timePickerWrap}><Pressable onPress={() => setTimeMenu(timeMenu === part ? null : part)} style={styles.timePicker}><Text style={styles.timePickerValue}>{String(value || 0).padStart(2, "0")}</Text><Text style={styles.timePickerLabel}>{label}</Text></Pressable>{timeMenu === part && <View style={styles.dropdown}>{options.map((option) => <Pressable key={option} onPress={() => updateTimePart(part, option)} style={styles.dropdownOption}><Text style={styles.dropdownText}>{String(option).padStart(2, "0")}</Text></Pressable>)}</View>}</View>)}</View>
               </View>
               <View style={styles.half}>
                 <Text style={styles.label}>التاريخ</Text>
@@ -188,6 +196,11 @@ const styles = StyleSheet.create({
   dropdown: { position: "absolute", top: 51, left: 0, right: 0, maxHeight: 170, backgroundColor: PALETTE.white, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 10, zIndex: 10, elevation: 6, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
   dropdownOption: { paddingVertical: 9, alignItems: "center", borderBottomWidth: 1, borderBottomColor: "#F0F3F5" },
   dropdownText: { color: PALETTE.ink, fontSize: 13, fontWeight: "700" },
+  timePickers: { flexDirection: "row-reverse", gap: 7 },
+  timePickerWrap: { flex: 1, position: "relative", zIndex: 3 },
+  timePicker: { minHeight: 48, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, backgroundColor: "#FBFCFE", alignItems: "center", justifyContent: "center" },
+  timePickerValue: { color: PALETTE.ink, fontSize: 15, fontWeight: "800" },
+  timePickerLabel: { color: PALETTE.muted, fontSize: 9, marginTop: 2 },
   reminderRow: { flexDirection: "row-reverse", gap: 7 },
   reminderPill: { flex: 1, height: 38, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   reminderPillActive: { backgroundColor: "#E5F6F2", borderColor: PALETTE.teal },
