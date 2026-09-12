@@ -1,11 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Notifications from "expo-notifications";
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as DocumentPicker from "expo-document-picker";
 import { notificationSoundForType } from "@/lib/calendar-utils";
+import { createTRPCClient } from "@/lib/trpc";
 
 export type EventType = "lesson" | "homework" | "exam" | "evaluation" | "activity";
 export type NotificationSound = "homework" | "exam";
@@ -51,6 +52,8 @@ type CalendarContextValue = {
   setDailyAlarm: (enabled: boolean, time: string) => Promise<void>;
   timeFormat: 12 | 24;
   setTimeFormat: (format: 12 | 24) => Promise<void>;
+  getCloudPayload: () => string;
+  restoreCloudPayload: (payload: string) => Promise<{ events: number; subjects: number }>;
 };
 
 type TransferData = { format: "school-calendar"; version: 1; exportedAt: string; events: CalendarEvent[]; subjectColors: Record<string, string>; reminderDefaults: ReminderDefaults };
@@ -154,6 +157,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [alarmEnabled, setAlarmEnabled] = useState(false);
   const [alarmTime, setAlarmTime] = useState("07:00");
   const [timeFormat, setTimeFormatState] = useState<12 | 24>(24);
+  const autoSyncReady = useRef(false);
 
   useEffect(() => {
     void (async () => {
@@ -261,9 +265,24 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const addSubject = async (subject: string, color: string) => { const next = { ...subjectColors, [subject]: color }; setSubjectColors(next); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(next)); };
   const removeSubject = async (subject: string) => { if (Object.keys(DEFAULT_SUBJECT_COLORS).includes(subject)) return; const next = { ...subjectColors }; delete next[subject]; setSubjectColors(next); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(next)); };
 
-  const exportData = async () => {
+  const buildTransferPayload = () => {
     const portableEvents = events.map(({ notificationId: _notificationId, ...event }) => event);
-    const payload: TransferData = { format: "school-calendar", version: 1, exportedAt: new Date().toISOString(), events: portableEvents, subjectColors, reminderDefaults };
+    return { format: "school-calendar" as const, version: 1 as const, exportedAt: new Date().toISOString(), events: portableEvents, subjectColors, reminderDefaults };
+  };
+  const getCloudPayload = () => JSON.stringify(buildTransferPayload());
+  const restoreCloudPayload = async (raw: string) => {
+    const parsed = JSON.parse(raw) as Partial<TransferData>;
+    if (parsed.format !== "school-calendar" || parsed.version !== 1 || !Array.isArray(parsed.events) || !parsed.subjectColors || typeof parsed.subjectColors !== "object") throw new Error("النسخة السحابية غير صالحة");
+    const nextColors = parsed.subjectColors as Record<string, string>;
+    const nextEvents = parsed.events as CalendarEvent[];
+    const validEvents = nextEvents.every((event) => event && typeof event.id === "string" && typeof event.title === "string" && typeof event.subject === "string" && typeof event.date === "string" && typeof event.time === "string" && typeof event.type === "string" && typeof event.done === "boolean" && typeof event.reminderMinutes === "number");
+    if (!validEvents) throw new Error("تحتوي النسخة السحابية على بيانات غير صالحة");
+    setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(parsed.reminderDefaults);
+    await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
+    return { events: nextEvents.length, subjects: Object.keys(nextColors).length };
+  };
+  const exportData = async () => {
+    const payload = buildTransferPayload();
     const uri = `${FileSystem.cacheDirectory}school-calendar-${Date.now()}.json`;
     await FileSystem.writeAsStringAsync(uri, JSON.stringify(payload, null, 2), { encoding: FileSystem.EncodingType.UTF8 });
     if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "application/json", dialogTitle: "تصدير روزنامتي الدراسية" });
@@ -301,7 +320,14 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   };
   const setTimeFormat = async (format: 12 | 24) => { setTimeFormatState(format); await AsyncStorage.setItem(TIME_FORMAT_KEY, String(format)); };
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, timeFormat, setTimeFormat }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!autoSyncReady.current) { autoSyncReady.current = true; return; }
+    const timer = setTimeout(() => { void createTRPCClient().cloudSync.push.mutate({ payload: getCloudPayload() }).catch(() => undefined); }, 1200);
+    return () => clearTimeout(timer);
+  }, [hydrated, events, subjectColors, reminderDefaults]);
+
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 
