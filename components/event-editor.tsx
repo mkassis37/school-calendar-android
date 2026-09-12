@@ -47,6 +47,7 @@ export function EventEditor({
   const [reminderMinutes, setReminderMinutes] = useState("15");
   const [notes, setNotes] = useState("");
   const [repeatWeekly, setRepeatWeekly] = useState(false);
+  const [dateMenu, setDateMenu] = useState<"day" | "month" | "year" | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -75,6 +76,18 @@ export function EventEditor({
       repeatWeekly,
     });
     setSaving(false);
+  };
+
+  const [dateYear, dateMonth, dateDay] = date.split("-").map(Number);
+  const daysInMonth = new Date(dateYear || 2026, (dateMonth || 1), 0).getDate();
+  const years = Array.from({ length: 11 }, (_, index) => (new Date().getFullYear() - 5 + index));
+  const months = Array.from({ length: 12 }, (_, index) => index + 1);
+  const days = Array.from({ length: daysInMonth }, (_, index) => index + 1);
+  const updateDatePart = (part: "day" | "month" | "year", value: number) => {
+    let nextYear = dateYear || new Date().getFullYear(); let nextMonth = dateMonth || 1; let nextDay = dateDay || 1;
+    if (part === "year") nextYear = value; if (part === "month") nextMonth = value; if (part === "day") nextDay = value;
+    const maxDay = new Date(nextYear, nextMonth, 0).getDate();
+    setDate(`${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(Math.min(nextDay, maxDay)).padStart(2, "0")}`); setDateMenu(null);
   };
 
   return (
@@ -118,7 +131,7 @@ export function EventEditor({
               </View>
               <View style={styles.half}>
                 <Text style={styles.label}>التاريخ</Text>
-                <TextInput value={date} onChangeText={setDate} placeholder="2026-09-14" placeholderTextColor="#AAB5BF" style={styles.input} textAlign="right" keyboardType="numbers-and-punctuation" />
+                <View style={styles.datePickers}>{([ ["day", "اليوم", dateDay, days], ["month", "الشهر", dateMonth, months], ["year", "السنة", dateYear, years] ] as const).map(([part, label, value, options]) => <View key={part} style={styles.datePickerWrap}><Pressable onPress={() => setDateMenu(dateMenu === part ? null : part)} style={styles.datePicker}><Text style={styles.datePickerValue}>{value || "—"}</Text><Text style={styles.datePickerLabel}>{label}</Text></Pressable>{dateMenu === part && <View style={styles.dropdown}>{options.map((option) => <Pressable key={option} onPress={() => updateDatePart(part, option)} style={styles.dropdownOption}><Text style={styles.dropdownText}>{option}</Text></Pressable>)}</View>}</View>)}</View>
               </View>
             </View>
 
@@ -167,6 +180,14 @@ const styles = StyleSheet.create({
   typeText: { color: PALETTE.muted, fontSize: 12, fontWeight: "700" },
   row: { flexDirection: "row-reverse", gap: 10 },
   half: { flex: 1 },
+  datePickers: { flexDirection: "row-reverse", gap: 5 },
+  datePickerWrap: { flex: 1, position: "relative", zIndex: 2 },
+  datePicker: { minHeight: 48, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, backgroundColor: "#FBFCFE", alignItems: "center", justifyContent: "center" },
+  datePickerValue: { color: PALETTE.ink, fontSize: 15, fontWeight: "800" },
+  datePickerLabel: { color: PALETTE.muted, fontSize: 9, marginTop: 2 },
+  dropdown: { position: "absolute", top: 51, left: 0, right: 0, maxHeight: 170, backgroundColor: PALETTE.white, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 10, zIndex: 10, elevation: 6, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
+  dropdownOption: { paddingVertical: 9, alignItems: "center", borderBottomWidth: 1, borderBottomColor: "#F0F3F5" },
+  dropdownText: { color: PALETTE.ink, fontSize: 13, fontWeight: "700" },
   reminderRow: { flexDirection: "row-reverse", gap: 7 },
   reminderPill: { flex: 1, height: 38, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, alignItems: "center", justifyContent: "center" },
   reminderPillActive: { backgroundColor: "#E5F6F2", borderColor: PALETTE.teal },
