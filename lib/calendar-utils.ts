@@ -30,6 +30,14 @@ export function notificationSoundForType(type: EventType, sounds: { homework: st
   return type === "exam" ? sounds.exam : sounds.homework;
 }
 
+export function formatDisplayTime(time: string, format: 12 | 24) {
+  const [rawHour, rawMinute] = time.split(":").map(Number);
+  if (format === 24 || !Number.isFinite(rawHour) || !Number.isFinite(rawMinute)) return time;
+  const period = rawHour >= 12 ? "مساءً" : "صباحًا";
+  const hour = rawHour % 12 || 12;
+  return `${hour}:${String(rawMinute).padStart(2, "0")} ${period}`;
+}
+
 
 export function weeklyStudySummary(events: Array<{ date: string; type: EventType; done: boolean }>, referenceDate = new Date()) {
   const weekStart = startOfWeek(referenceDate);

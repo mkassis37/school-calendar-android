@@ -1,0 +1,12 @@
+from pathlib import Path
+p=Path('/home/ubuntu/school-calendar-android/app/(tabs)/index.tsx')
+s=p.read_text()
+s=s.replace('from "@/lib/calendar-store";\n', 'from "@/lib/calendar-store";\nimport { formatDisplayTime } from "@/lib/calendar-utils";\n', 1)
+s=s.replace('function EventCard({ event, subjectColor, onDetails, onEdit, onDelete, onToggle }:', 'function EventCard({ event, timeFormat, subjectColor, onDetails, onEdit, onDelete, onToggle }:', 1)
+s=s.replace('event: CalendarEvent; subjectColor?: string;', 'event: CalendarEvent; timeFormat: 12 | 24; subjectColor?: string;', 1)
+s=s.replace('onDetails={() => setDetailsEvent(item)}', 'timeFormat={timeFormat} onDetails={() => setDetailsEvent(item)}', 1)
+s=s.replace('<Text style={styles.eventTime}>{event.time}</Text>', '<Text style={styles.eventTime}>{formatDisplayTime(event.time, timeFormat)}</Text>', 1)
+s=s.replace('<EventDetails event={detailsEvent}', '<EventDetails event={detailsEvent} timeFormat={timeFormat}', 1)
+s=s.replace('function EventDetails({ event, onClose }: { event: CalendarEvent | null; onClose: () => void })', 'function EventDetails({ event, timeFormat, onClose }: { event: CalendarEvent | null; timeFormat: 12 | 24; onClose: () => void })', 1)
+s=s.replace('<DetailRow label="الوقت" value={event.time} />', '<DetailRow label="الوقت" value={formatDisplayTime(event.time, timeFormat)} />', 1)
+p.write_text(s)
