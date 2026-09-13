@@ -58,6 +58,53 @@ type CalendarContextValue = {
 
 type TransferData = { format: "school-calendar"; version: 1; exportedAt: string; events: CalendarEvent[]; subjectColors: Record<string, string>; reminderDefaults: ReminderDefaults };
 
+const EVENT_TYPES = new Set<EventType>(["lesson", "homework", "exam", "evaluation", "activity"]);
+const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/;
+const TIME_KEY = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+
+function isValidEvent(value: unknown): value is CalendarEvent {
+  if (!value || typeof value !== "object") return false;
+  const event = value as Partial<CalendarEvent>;
+  const reminderMinutes = event.reminderMinutes;
+  return typeof event.id === "string" && event.id.length > 0 && event.id.length <= 100 &&
+    typeof event.title === "string" && event.title.length > 0 && event.title.length <= 200 &&
+    typeof event.subject === "string" && event.subject.length <= 100 &&
+    typeof event.date === "string" && DATE_KEY.test(event.date) &&
+    typeof event.time === "string" && TIME_KEY.test(event.time) &&
+    typeof event.type === "string" && EVENT_TYPES.has(event.type as EventType) &&
+    typeof event.done === "boolean" && typeof reminderMinutes === "number" && Number.isInteger(reminderMinutes) && reminderMinutes >= 0 && reminderMinutes <= 10080 &&
+    (event.notes === undefined || (typeof event.notes === "string" && event.notes.length <= 10000)) &&
+    (event.repeatWeekly === undefined || typeof event.repeatWeekly === "boolean");
+}
+
+function isValidColorMap(value: unknown): value is Record<string, string> {
+  return !!value && typeof value === "object" && Object.keys(value).length <= 200 && Object.entries(value).every(([name, color]) => name.length > 0 && name.length <= 100 && typeof color === "string" && HEX_COLOR.test(color));
+}
+
+function isValidReminderDefaults(value: unknown): value is ReminderDefaults {
+  if (!value || typeof value !== "object") return false;
+  const defaults = value as Partial<ReminderDefaults>;
+  return typeof defaults.homework === "number" && Number.isInteger(defaults.homework) && defaults.homework >= 0 && defaults.homework <= 10080 && typeof defaults.exam === "number" && Number.isInteger(defaults.exam) && defaults.exam >= 0 && defaults.exam <= 10080;
+}
+
+function isNotificationSounds(value: unknown): value is Record<NotificationSound, string> {
+  return !!value && typeof value === "object" && (value as Record<string, unknown>).homework === "homework_soft.wav" && (value as Record<string, unknown>).exam === "exam_alert.wav";
+}
+
+function isValidTransferData(value: unknown): value is TransferData {
+  if (!value || typeof value !== "object") return false;
+  const data = value as Partial<TransferData>;
+  return data.format === "school-calendar" && data.version === 1 && Array.isArray(data.events) && data.events.length <= 5000 && data.events.every(isValidEvent) && isValidColorMap(data.subjectColors) && isValidReminderDefaults(data.reminderDefaults);
+}
+
+function safeStoredJson<T>(raw: string | null, fallback: T, validate: (value: unknown) => value is T): T {
+  if (!raw) return fallback;
+  try { const parsed: unknown = JSON.parse(raw); return validate(parsed) ? parsed : fallback; } catch { return fallback; }
+}
+
+function isEventArray(value: unknown): value is CalendarEvent[] { return Array.isArray(value) && value.length <= 5000 && value.every(isValidEvent); }
+
 const STORAGE_KEY = "school-calendar-events-v1";
 const NOTIFICATION_KEY = "school-calendar-notifications-v1";
 const SUBJECT_COLORS_KEY = "school-calendar-subject-colors-v1";
@@ -171,11 +218,11 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         AsyncStorage.getItem(ALARM_TIME_KEY),
         AsyncStorage.getItem(TIME_FORMAT_KEY),
       ]);
-      setEvents(storedEvents ? JSON.parse(storedEvents) : seedEvents());
+      setEvents(safeStoredJson(storedEvents, seedEvents(), isEventArray));
       setNotificationsEnabled(storedNotifications === "true");
-      setSubjectColors(storedSubjectColors ? { ...DEFAULT_SUBJECT_COLORS, ...JSON.parse(storedSubjectColors) } : DEFAULT_SUBJECT_COLORS);
-      setNotificationSounds(storedNotificationSounds ? { ...DEFAULT_NOTIFICATION_SOUNDS, ...JSON.parse(storedNotificationSounds) } : DEFAULT_NOTIFICATION_SOUNDS);
-      setReminderDefaults(storedReminderDefaults ? { ...DEFAULT_REMINDER_DEFAULTS, ...JSON.parse(storedReminderDefaults) } : DEFAULT_REMINDER_DEFAULTS);
+      setSubjectColors(storedSubjectColors ? { ...DEFAULT_SUBJECT_COLORS, ...safeStoredJson(storedSubjectColors, {}, isValidColorMap) } : DEFAULT_SUBJECT_COLORS);
+      setNotificationSounds(storedNotificationSounds ? safeStoredJson(storedNotificationSounds, DEFAULT_NOTIFICATION_SOUNDS, isNotificationSounds) : DEFAULT_NOTIFICATION_SOUNDS);
+      setReminderDefaults(storedReminderDefaults ? { ...DEFAULT_REMINDER_DEFAULTS, ...safeStoredJson(storedReminderDefaults, DEFAULT_REMINDER_DEFAULTS, isValidReminderDefaults) } : DEFAULT_REMINDER_DEFAULTS);
       setAlarmEnabled(storedAlarm === "true"); setAlarmTime(storedAlarmTime ?? "07:00");
       setTimeFormatState(storedTimeFormat === "12" ? 12 : 24);
       setHydrated(true);
@@ -271,12 +318,11 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   };
   const getCloudPayload = () => JSON.stringify(buildTransferPayload());
   const restoreCloudPayload = async (raw: string) => {
-    const parsed = JSON.parse(raw) as Partial<TransferData>;
-    if (parsed.format !== "school-calendar" || parsed.version !== 1 || !Array.isArray(parsed.events) || !parsed.subjectColors || typeof parsed.subjectColors !== "object") throw new Error("النسخة السحابية غير صالحة");
-    const nextColors = parsed.subjectColors as Record<string, string>;
-    const nextEvents = parsed.events as CalendarEvent[];
-    const validEvents = nextEvents.every((event) => event && typeof event.id === "string" && typeof event.title === "string" && typeof event.subject === "string" && typeof event.date === "string" && typeof event.time === "string" && typeof event.type === "string" && typeof event.done === "boolean" && typeof event.reminderMinutes === "number");
-    if (!validEvents) throw new Error("تحتوي النسخة السحابية على بيانات غير صالحة");
+    let parsed: unknown;
+    try { parsed = JSON.parse(raw); } catch { throw new Error("النسخة السحابية غير صالحة"); }
+    if (!isValidTransferData(parsed)) throw new Error("تحتوي النسخة السحابية على بيانات غير صالحة");
+    const nextColors = parsed.subjectColors;
+    const nextEvents = parsed.events;
     setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(parsed.reminderDefaults);
     await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
     return { events: nextEvents.length, subjects: Object.keys(nextColors).length };
@@ -293,12 +339,10 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     if (result.canceled) return { imported: false, message: "تم إلغاء الاستيراد" };
     try {
       const raw = await FileSystem.readAsStringAsync(result.assets[0].uri, { encoding: FileSystem.EncodingType.UTF8 });
-      const parsed = JSON.parse(raw) as Partial<TransferData>;
-      if (parsed.format !== "school-calendar" || parsed.version !== 1 || !Array.isArray(parsed.events) || !parsed.subjectColors || typeof parsed.subjectColors !== "object") return { imported: false, message: "الملف غير صالح أو ليس ملف روزنامة" };
-      const nextColors = parsed.subjectColors as Record<string, string>;
-      const validEvents = parsed.events.every((event) => event && typeof event === "object" && typeof event.id === "string" && typeof event.title === "string" && typeof event.subject === "string" && typeof event.date === "string" && typeof event.time === "string" && typeof event.type === "string" && typeof event.done === "boolean" && typeof event.reminderMinutes === "number");
-      if (!validEvents || Object.keys(nextColors).some((name) => typeof name !== "string" || typeof nextColors[name] !== "string")) return { imported: false, message: "يحتوي الملف على موعد أو مادة غير صالحة" };
-      const nextEvents = parsed.events as CalendarEvent[];
+      const parsed: unknown = JSON.parse(raw);
+      if (!isValidTransferData(parsed)) return { imported: false, message: "يحتوي الملف على موعد أو مادة غير صالحة" };
+      const nextColors = parsed.subjectColors;
+      const nextEvents = parsed.events;
       if (!(await confirmReplacement())) return { imported: false, message: "تم إلغاء الاستيراد" };
       setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(parsed.reminderDefaults);
       await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
