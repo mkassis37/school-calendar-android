@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useCalendar } from "@/lib/calendar-store";
@@ -18,6 +18,7 @@ export default function SettingsScreen() {
   const enable = async () => { const granted = await requestNotifications(); if (!granted) Alert.alert("التنبيهات غير مفعّلة", "يمكنك تفعيلها من إعدادات Android للسماح بالتذكير قبل الدروس والواجبات."); };
   const [newSubject, setNewSubject] = useState("");
   const [syncMessage, setSyncMessage] = useState("");
+  const [updateMessage, setUpdateMessage] = useState("");
   const cloudPull = trpc.cloudSync.pull.useQuery(undefined, { enabled: false });
   const cloudPush = trpc.cloudSync.push.useMutation();
   const subjects = Object.keys(savedSubjectColors);
@@ -26,6 +27,7 @@ export default function SettingsScreen() {
   const { getCloudPayload, restoreCloudPayload } = useCalendar();
   const uploadCloudBackup = async () => { try { await cloudPush.mutateAsync({ payload: getCloudPayload() }); setSyncMessage("تم حفظ نسخة احتياطية سحابية الآن"); } catch { setSyncMessage("تعذر الحفظ. سجّل الدخول وتأكد من اتصال الإنترنت"); } };
   const restoreCloudBackup = async () => { try { const result = await cloudPull.refetch(); if (!result.data) { setSyncMessage("لا توجد نسخة سحابية لهذا الحساب"); return; } Alert.alert("استبدال البيانات الحالية؟", "سيتم استبدال المواد والمواعيد الحالية بالنسخة السحابية.", [{ text: "إلغاء", style: "cancel" }, { text: "استعادة", style: "destructive", onPress: () => void restoreCloudPayload(result.data!.payload).then((value) => setSyncMessage(`تمت استعادة ${value.events} موعدًا و${value.subjects} مادة`)).catch(() => setSyncMessage("النسخة السحابية غير صالحة")) }]); } catch { setSyncMessage("تعذر الاستعادة. سجّل الدخول وتأكد من اتصال الإنترنت"); } };
+  const checkForUpdate = async () => { setUpdateMessage("جارٍ التحقق..."); try { const response = await fetch("https://api.github.com/repos/mkassis37/school-calendar-android/releases/latest", { headers: { Accept: "application/vnd.github+json" } }); if (!response.ok) throw new Error("update check failed"); const release = await response.json() as { tag_name?: string; html_url?: string; assets?: Array<{ name?: string; browser_download_url?: string }> }; const apk = release.assets?.find((asset) => asset.name?.endsWith(".apk")); if (!apk?.browser_download_url) { setUpdateMessage("لا يوجد APK منشور حاليًا"); return; } setUpdateMessage(`آخر نسخة منشورة: ${release.tag_name ?? "جديدة"}`); Alert.alert("تحديث متاح", "سيتم فتح صفحة تنزيل APK. يبدأ التثبيت بعد موافقتك في Android.", [{ text: "لاحقًا", style: "cancel" }, { text: "تنزيل", onPress: () => void Linking.openURL(apk.browser_download_url!) }]); } catch { setUpdateMessage("تعذر التحقق. تأكد من اتصال الإنترنت"); } };
   return <ScreenContainer className="bg-background" edges={["top", "left", "right"]}>
     <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
       <View style={styles.header}><Text style={styles.title}>الإعدادات</Text><Text style={styles.subtitle}>خلّي الروزنامة على طريقتك</Text></View>
@@ -44,6 +46,7 @@ export default function SettingsScreen() {
       <Text style={styles.section}>النسخ الاحتياطي السحابي</Text><View style={styles.card}><Text style={styles.transferHint}>احفظ نسخة احتياطية بشكل آمن عبر اتصال مشفّر على حسابك، واستعدها على جهاز آخر عند تسجيل الدخول. يبقى التطبيق أوفلاين ويستمر الاستيراد والتصدير المحلي.</Text><View style={styles.transferRow}><Pressable onPress={() => void uploadCloudBackup()} style={styles.transferButton}><Text style={styles.transferButtonText}>{cloudPush.isPending ? "جارٍ الحفظ..." : "حفظ سحابي الآن"}</Text></Pressable><Pressable onPress={() => void restoreCloudBackup()} style={[styles.transferButton, styles.importButton]}><Text style={styles.importButtonText}>{cloudPull.isFetching ? "جارٍ الاستعادة..." : "استعادة سحابية"}</Text></Pressable></View>{syncMessage ? <Text style={styles.syncMessage}>{syncMessage}</Text> : null}</View>
       <Text style={styles.section}>عن التطبيق</Text>
       <View style={styles.aboutCard}><Image source={require("@/assets/images/school-calendar-hero-small.jpg")} style={{ width: 48, height: 48, borderRadius: 15 }} /><View style={styles.aboutCopy}><Text style={styles.aboutTitle}>روزنامتي الدراسية</Text><Text style={styles.aboutSub}>نسخة تجريبية · مصممة للدراسة بدون تعقيد</Text></View><Text style={styles.version}>١.٠</Text></View>
+      <View style={styles.card}><View style={styles.settingRow}><View style={[styles.settingIcon, { backgroundColor: "#E5F6F2" }]}><IconSymbol name="sync" size={21} color={C.teal} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>تحديث التطبيق</Text><Text style={styles.settingSub}>فحص آخر APK منشور على GitHub وتنزيله يدويًا</Text></View></View><Pressable onPress={() => void checkForUpdate()} style={styles.transferButton}><Text style={styles.transferButtonText}>فحص التحديثات</Text></Pressable>{updateMessage ? <Text style={styles.syncMessage}>{updateMessage}</Text> : null}</View>
       <View style={styles.offline}><IconSymbol name="cloudOff" size={17} color={C.teal} /><Text style={styles.offlineText}>كل مواعيدك محفوظة على الجهاز ويمكن الوصول إليها بدون إنترنت.</Text></View>
     </ScrollView>
   </ScreenContainer>;
