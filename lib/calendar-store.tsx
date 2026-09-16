@@ -50,6 +50,7 @@ type CalendarContextValue = {
   alarmEnabled: boolean;
   alarmTime: string;
   setDailyAlarm: (enabled: boolean, time: string) => Promise<void>;
+  previewAlarmSound: () => Promise<void>;
   timeFormat: 12 | 24;
   setTimeFormat: (format: 12 | 24) => Promise<void>;
   getCloudPayload: () => string;
@@ -277,6 +278,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       });
       await Notifications.setNotificationChannelAsync("school-calendar-homework", { name: "تنبيهات الواجبات", importance: Notifications.AndroidImportance.HIGH, sound: notificationSounds.homework });
       await Notifications.setNotificationChannelAsync("school-calendar-exam", { name: "تنبيهات الامتحانات", importance: Notifications.AndroidImportance.HIGH, sound: notificationSounds.exam });
+      await Notifications.setNotificationChannelAsync("school-calendar-alarm", { name: "منبه الدراسة", importance: Notifications.AndroidImportance.HIGH });
     }
     const current = await Notifications.getPermissionsAsync();
     const result = current.status === "granted" ? current : await Notifications.requestPermissionsAsync();
@@ -362,6 +364,11 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     }
     setAlarmEnabled(enabled); setAlarmTime(time); await AsyncStorage.setItem(ALARM_TIME_KEY, time);
   };
+  const previewAlarmSound = async () => {
+    if (Platform.OS === "web") return;
+    await Notifications.setNotificationChannelAsync("school-calendar-alarm", { name: "منبه الدراسة", importance: Notifications.AndroidImportance.HIGH });
+    await Notifications.scheduleNotificationAsync({ content: { title: "تجربة منبه الدراسة", body: "هذه تجربة للصوت المختار من إعدادات Android." }, trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 1, repeats: false, channelId: "school-calendar-alarm" } });
+  };
   const setTimeFormat = async (format: 12 | 24) => { setTimeFormatState(format); await AsyncStorage.setItem(TIME_FORMAT_KEY, String(format)); };
 
   useEffect(() => {
@@ -371,7 +378,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [hydrated, events, subjectColors, reminderDefaults]);
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 
