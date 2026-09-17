@@ -51,6 +51,8 @@ export function EventEditor({
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [dateMenu, setDateMenu] = useState<"day" | "month" | "year" | null>(null);
   const [timeMenu, setTimeMenu] = useState<"hour" | "minute" | null>(null);
+  const [clockVisible, setClockVisible] = useState(false);
+  const [calendarVisible, setCalendarVisible] = useState(false);
   const [timeFormat, setTimeFormat] = useState<12 | 24>(24);
   const [period, setPeriod] = useState<"AM" | "PM">("AM");
   const [saving, setSaving] = useState(false);
@@ -105,6 +107,7 @@ export function EventEditor({
     setTime(`${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`); setTimeMenu(null);
   };
   const changePeriod = (next: "AM" | "PM") => { const hour12 = timeHour % 12; const hour = hour12 + (next === "PM" ? 12 : 0); setPeriod(next); setTime(`${String(hour).padStart(2, "0")}:${String(timeMinute || 0).padStart(2, "0")}`); };
+  const chooseCalendarDate = (year: number, month: number, day: number) => { const safeDay = Math.min(day, new Date(year, month, 0).getDate()); setDate(`${year}-${String(month).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`); setCalendarVisible(false); };
 
   return (
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
@@ -143,11 +146,11 @@ export function EventEditor({
             <View style={styles.row}>
               <View style={styles.half}>
                 <Text style={styles.label}>الوقت</Text>
-                <View style={styles.formatRow}><Pressable onPress={() => setTimeFormat(24)} style={[styles.formatPill, timeFormat === 24 && styles.formatPillActive]}><Text style={[styles.formatText, timeFormat === 24 && styles.formatTextActive]}>24 ساعة</Text></Pressable><Pressable onPress={() => setTimeFormat(12)} style={[styles.formatPill, timeFormat === 12 && styles.formatPillActive]}><Text style={[styles.formatText, timeFormat === 12 && styles.formatTextActive]}>12 ساعة</Text></Pressable></View><View style={styles.timePickers}>{([["hour", "الساعة", displayHour, hours], ["minute", "الدقائق", timeMinute, minutes]] as const).map(([part, label, value, options]) => <View key={part} style={styles.timePickerWrap}><Pressable onPress={() => setTimeMenu(timeMenu === part ? null : part)} style={styles.timePicker}><Text style={styles.timePickerValue}>{String(value || 0).padStart(2, "0")}</Text><Text style={styles.timePickerLabel}>{label}</Text></Pressable>{timeMenu === part && <View style={styles.dropdown}><ScrollView nestedScrollEnabled showsVerticalScrollIndicator>{options.map((option) => <Pressable key={option} onPress={() => updateTimePart(part, option)} style={styles.dropdownOption}><Text style={styles.dropdownText}>{String(option).padStart(2, "0")}</Text></Pressable>)}</ScrollView></View>}</View>)}{timeFormat === 12 && <View style={styles.periodWrap}><Pressable onPress={() => changePeriod("AM")} style={[styles.periodPill, period === "AM" && styles.formatPillActive]}><Text style={[styles.formatText, period === "AM" && styles.formatTextActive]}>صباحًا</Text></Pressable><Pressable onPress={() => changePeriod("PM")} style={[styles.periodPill, period === "PM" && styles.formatPillActive]}><Text style={[styles.formatText, period === "PM" && styles.formatTextActive]}>مساءً</Text></Pressable></View>}</View>
+                <View style={styles.formatRow}><Pressable onPress={() => setTimeFormat(24)} style={[styles.formatPill, timeFormat === 24 && styles.formatPillActive]}><Text style={[styles.formatText, timeFormat === 24 && styles.formatTextActive]}>24 ساعة</Text></Pressable><Pressable onPress={() => setTimeFormat(12)} style={[styles.formatPill, timeFormat === 12 && styles.formatPillActive]}><Text style={[styles.formatText, timeFormat === 12 && styles.formatTextActive]}>12 ساعة</Text></Pressable></View><Pressable onPress={() => setClockVisible(true)} style={styles.clockOpenButton}><Text style={styles.timePickerValue}>{timeFormat === 12 ? `${displayHour}:${String(timeMinute).padStart(2, "0")} ${period === "AM" ? "ص" : "م"}` : `${String(timeHour).padStart(2, "0")}:${String(timeMinute).padStart(2, "0")}`}</Text><Text style={styles.timePickerLabel}>فتح الساعة التناظرية</Text></Pressable>
               </View>
               <View style={styles.half}>
                 <Text style={styles.label}>التاريخ</Text>
-                <View style={styles.datePickers}>{([ ["day", "اليوم", dateDay, days], ["month", "الشهر", dateMonth, months], ["year", "السنة", dateYear, years] ] as const).map(([part, label, value, options]) => <View key={part} style={styles.datePickerWrap}><Pressable onPress={() => setDateMenu(dateMenu === part ? null : part)} style={styles.datePicker}><Text style={styles.datePickerValue}>{value || "—"}</Text><Text style={styles.datePickerLabel}>{label}</Text></Pressable>{dateMenu === part && <View style={styles.dropdown}><ScrollView nestedScrollEnabled showsVerticalScrollIndicator>{options.map((option) => <Pressable key={option} onPress={() => updateDatePart(part, option)} style={styles.dropdownOption}><Text style={styles.dropdownText}>{option}</Text></Pressable>)}</ScrollView></View>}</View>)}</View>
+                <Pressable onPress={() => setCalendarVisible(true)} style={styles.calendarOpenButton}><Text style={styles.datePickerValue}>{dateDay} / {dateMonth} / {dateYear}</Text><Text style={styles.datePickerLabel}>فتح الرزنامة لاختيار اليوم</Text></Pressable>
               </View>
             </View>
 
@@ -173,10 +176,27 @@ export function EventEditor({
               <Text style={styles.saveText}>{saving ? "جارٍ الحفظ..." : event ? "حفظ التعديلات" : "إضافة للروزنامة"}</Text>
             </Pressable>
           </ScrollView>
+          <ClockPicker visible={clockVisible} time={time} format={timeFormat} period={period} onSelect={updateTimePart} onPeriodChange={changePeriod} onClose={() => setClockVisible(false)} />
+          <CalendarPicker visible={calendarVisible} year={dateYear} month={dateMonth} day={dateDay} onSelect={chooseCalendarDate} onClose={() => setCalendarVisible(false)} />
         </View>
       </KeyboardAvoidingView>
     </Modal>
   );
+}
+
+function ClockPicker({ visible, time, format, period, onSelect, onPeriodChange, onClose }: { visible: boolean; time: string; format: 12 | 24; period: "AM" | "PM"; onSelect: (part: "hour" | "minute", value: number) => void; onPeriodChange: (period: "AM" | "PM") => void; onClose: () => void }) {
+  const [mode, setMode] = useState<"hour" | "minute">("hour");
+  const [hour, minute] = time.split(":").map(Number);
+  const values = mode === "hour" ? (format === 12 ? Array.from({ length: 12 }, (_, i) => i + 1) : Array.from({ length: 24 }, (_, i) => i)) : Array.from({ length: 12 }, (_, i) => i * 5);
+  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><View style={styles.clockOverlay}><View style={styles.clockCard}><Text style={styles.clockTitle}>اختيار الوقت</Text><Text style={styles.clockValue}>{format === 12 ? `${hour % 12 || 12}:${String(minute).padStart(2, "0")} ${period === "AM" ? "صباحًا" : "مساءً"}` : `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`}</Text><View style={styles.clockModeRow}><Pressable onPress={() => setMode("hour")} style={[styles.clockMode, mode === "hour" && styles.clockModeActive]}><Text style={styles.clockModeText}>الساعة</Text></Pressable><Pressable onPress={() => setMode("minute")} style={[styles.clockMode, mode === "minute" && styles.clockModeActive]}><Text style={styles.clockModeText}>الدقائق</Text></Pressable></View><View style={styles.clockFace}>{values.map((value, index) => { const angle = (index / values.length) * Math.PI * 2 - Math.PI / 2; const left = 112 + Math.cos(angle) * 78 - 19; const top = 112 + Math.sin(angle) * 78 - 19; const selected = mode === "hour" ? (format === 12 ? value === (hour % 12 || 12) : value === hour) : value === minute; return <Pressable key={value} onPress={() => onSelect(mode, value)} style={[styles.clockMark, { left, top }, selected && styles.clockMarkActive]}><Text style={styles.clockMarkText}>{String(value).padStart(2, "0")}</Text></Pressable>; })}</View>{format === 12 && <View style={styles.clockPeriodRow}><Pressable onPress={() => onPeriodChange("AM")} style={[styles.periodPill, period === "AM" && styles.formatPillActive]}><Text style={styles.formatText}>صباحًا</Text></Pressable><Pressable onPress={() => onPeriodChange("PM")} style={[styles.periodPill, period === "PM" && styles.formatPillActive]}><Text style={styles.formatText}>مساءً</Text></Pressable></View>}<Pressable onPress={onClose} style={styles.clockDone}><Text style={styles.clockDoneText}>تم</Text></Pressable></View></View></Modal>;
+}
+
+function CalendarPicker({ visible, year, month, day, onSelect, onClose }: { visible: boolean; year: number; month: number; day: number; onSelect: (year: number, month: number, day: number) => void; onClose: () => void }) {
+  const [viewYear, setViewYear] = useState(year); const [viewMonth, setViewMonth] = useState(month);
+  useEffect(() => { if (visible) { setViewYear(year); setViewMonth(month); } }, [visible, year, month]);
+  const shiftMonth = (amount: number) => { const next = new Date(viewYear, viewMonth - 1 + amount, 1); setViewYear(next.getFullYear()); setViewMonth(next.getMonth() + 1); };
+  const firstDay = new Date(viewYear, viewMonth - 1, 1).getDay(); const total = new Date(viewYear, viewMonth, 0).getDate(); const cells = Array.from({ length: firstDay + total }, (_, i) => i < firstDay ? null : i - firstDay + 1);
+  return <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}><View style={styles.clockOverlay}><View style={styles.calendarCard}><View style={styles.calendarHeader}><Text style={styles.clockTitle}>اختيار اليوم</Text><Pressable onPress={onClose}><Text style={styles.closeText}>إغلاق</Text></Pressable></View><View style={styles.calendarNav}><Pressable onPress={() => shiftMonth(-1)} style={styles.calendarNavButton}><Text style={styles.calendarNavText}>السابق</Text></Pressable><Text style={styles.calendarMonth}>{viewYear} / {String(viewMonth).padStart(2, "0")}</Text><Pressable onPress={() => shiftMonth(1)} style={styles.calendarNavButton}><Text style={styles.calendarNavText}>التالي</Text></Pressable></View><View style={styles.weekRow}>{["أحد", "اثن", "ثلث", "أرب", "خمي", "جمع", "سبت"].map((name) => <Text key={name} style={styles.weekText}>{name}</Text>)}</View><View style={styles.calendarGrid}>{cells.map((value, index) => value === null ? <View key={`empty-${index}`} style={styles.calendarCell} /> : <Pressable key={value} onPress={() => onSelect(viewYear, viewMonth, value)} style={[styles.calendarCell, value === day && viewMonth === month && viewYear === year && styles.calendarDayActive]}><Text style={styles.calendarDayText}>{value}</Text></Pressable>)}</View></View></View></Modal>;
 }
 
 const styles = StyleSheet.create({
@@ -204,6 +224,36 @@ const styles = StyleSheet.create({
   dropdown: { position: "absolute", top: 51, left: 0, right: 0, maxHeight: 170, backgroundColor: PALETTE.white, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 10, zIndex: 10, elevation: 6, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 8, shadowOffset: { width: 0, height: 3 } },
   dropdownOption: { minHeight: 40, paddingVertical: 9, alignItems: "center", justifyContent: "center", borderBottomWidth: 1, borderBottomColor: "#F0F3F5" },
   dropdownText: { color: PALETTE.ink, fontSize: 13, fontWeight: "700" },
+  clockOpenButton: { minHeight: 58, borderWidth: 1, borderColor: PALETTE.teal, borderRadius: 12, backgroundColor: "#E5F6F2", alignItems: "center", justifyContent: "center" },
+  calendarOpenButton: { minHeight: 58, borderWidth: 1, borderColor: PALETTE.teal, borderRadius: 12, backgroundColor: "#E5F6F2", alignItems: "center", justifyContent: "center" },
+  clockOverlay: { flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: "rgba(20,35,48,0.42)" },
+  clockCard: { width: "100%", maxWidth: 360, backgroundColor: PALETTE.white, borderRadius: 24, padding: 18, alignItems: "center" },
+  clockTitle: { color: PALETTE.ink, fontSize: 18, fontWeight: "900", textAlign: "right" },
+  clockValue: { color: PALETTE.teal, fontSize: 25, fontWeight: "900", marginVertical: 8 },
+  clockModeRow: { flexDirection: "row-reverse", gap: 8, width: "100%" },
+  clockMode: { flex: 1, paddingVertical: 8, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 10, alignItems: "center" },
+  clockModeActive: { backgroundColor: "#E5F6F2", borderColor: PALETTE.teal },
+  clockModeText: { color: PALETTE.ink, fontSize: 11, fontWeight: "800" },
+  clockFace: { width: 224, height: 224, borderRadius: 112, backgroundColor: "#F5F9FA", marginVertical: 14, position: "relative", borderWidth: 2, borderColor: "#D9EEEA" },
+  clockMark: { width: 38, height: 38, borderRadius: 19, alignItems: "center", justifyContent: "center", position: "absolute" },
+  clockMarkActive: { backgroundColor: PALETTE.teal },
+  clockMarkText: { color: PALETTE.ink, fontSize: 11, fontWeight: "900" },
+  clockPeriodRow: { flexDirection: "row-reverse", gap: 8, width: "100%" },
+  clockDone: { marginTop: 12, width: "100%", paddingVertical: 12, borderRadius: 12, backgroundColor: PALETTE.teal, alignItems: "center" },
+  clockDoneText: { color: PALETTE.white, fontWeight: "900" },
+  calendarCard: { width: "100%", maxWidth: 360, backgroundColor: PALETTE.white, borderRadius: 24, padding: 18 },
+  calendarHeader: { flexDirection: "row-reverse", justifyContent: "space-between", alignItems: "center" },
+  closeText: { color: PALETTE.teal, fontSize: 12, fontWeight: "800" },
+  calendarNav: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", marginVertical: 10 },
+  calendarNavButton: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 9, backgroundColor: "#E5F6F2" },
+  calendarNavText: { color: PALETTE.teal, fontSize: 10, fontWeight: "800" },
+  calendarMonth: { color: PALETTE.muted, textAlign: "center", fontWeight: "800" },
+  weekRow: { flexDirection: "row", justifyContent: "space-around", marginBottom: 8 },
+  weekText: { width: "14.28%", textAlign: "center", color: PALETTE.muted, fontSize: 10, fontWeight: "800" },
+  calendarGrid: { flexDirection: "row", flexWrap: "wrap" },
+  calendarCell: { width: "14.28%", aspectRatio: 1, alignItems: "center", justifyContent: "center", borderRadius: 18 },
+  calendarDayActive: { backgroundColor: PALETTE.teal },
+  calendarDayText: { color: PALETTE.ink, fontSize: 13, fontWeight: "800" },
   timePickers: { flexDirection: "row-reverse", gap: 7 },
   timePickerWrap: { flex: 1, position: "relative", zIndex: 3 },
   timePicker: { minHeight: 48, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, backgroundColor: "#FBFCFE", alignItems: "center", justifyContent: "center" },
