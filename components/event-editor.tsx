@@ -184,7 +184,7 @@ export function EventEditor({
   );
 }
 
-function ClockPicker({ visible, time, format, period, onSelect, onPeriodChange, onClose }: { visible: boolean; time: string; format: 12 | 24; period: "AM" | "PM"; onSelect: (part: "hour" | "minute", value: number) => void; onPeriodChange: (period: "AM" | "PM") => void; onClose: () => void }) {
+export function ClockPicker({ visible, time, format, period, onSelect, onPeriodChange, onClose }: { visible: boolean; time: string; format: 12 | 24; period: "AM" | "PM"; onSelect: (part: "hour" | "minute", value: number) => void; onPeriodChange: (period: "AM" | "PM") => void; onClose: () => void }) {
   const [mode, setMode] = useState<"hour" | "minute">("hour");
   const [hour, minute] = time.split(":").map(Number);
   const values = mode === "hour" ? (format === 12 ? Array.from({ length: 12 }, (_, i) => i + 1) : Array.from({ length: 24 }, (_, i) => i)) : Array.from({ length: 12 }, (_, i) => i * 5);
