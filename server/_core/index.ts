@@ -64,7 +64,7 @@ async function startServer() {
 
   app.get("/api/app-update", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    res.json({ version: "1.0.2", downloadUrl: "" });
+    res.json({ version: "1.0.3", downloadUrl: "https://schoolcalend-4ahxryef.manus.space/manus-storage/public-updates/school-calendar-latest_c9cad997.apk" });
   });
 
   app.use(
