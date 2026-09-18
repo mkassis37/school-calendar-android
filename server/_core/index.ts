@@ -62,6 +62,11 @@ async function startServer() {
     res.json({ ok: true, timestamp: Date.now() });
   });
 
+  app.get("/api/app-update", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ version: "1.0.2", downloadUrl: "" });
+  });
+
   app.use(
     "/api/trpc",
     createExpressMiddleware({
