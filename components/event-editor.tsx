@@ -67,13 +67,23 @@ export function EventEditor({
     setTimeFormat(preferredTimeFormat);
     const initialHour = Number((event?.time ?? "08:00").split(":")[0]); setPeriod(initialHour >= 12 ? "PM" : "AM");
     setType(event?.type ?? "lesson");
-    const defaultReminder = event?.reminderMinutes ?? (event?.type === "exam" ? reminderDefaults?.exam : event?.type === "homework" ? reminderDefaults?.homework : 15) ?? 15;
-    const initialReminders = event?.reminderMinutesList ?? (defaultReminder > 0 ? [defaultReminder] : []);
+    const configuredReminders = reminderDefaults?.[event?.type ?? "lesson"] ?? [15];
+    const defaultReminder = event?.reminderMinutes ?? configuredReminders[0] ?? 0;
+    const initialReminders = event?.reminderMinutesList ?? (defaultReminder > 0 ? configuredReminders : []);
     setReminderMinutesList(initialReminders);
     setReminderMinutes(String(initialReminders[0] ?? 0));
     setNotes(event?.notes ?? "");
     setRepeatWeekly(event?.repeatWeekly ?? false);
   }, [visible, event, defaultDate, reminderDefaults, preferredTimeFormat]);
+
+  const changeType = (next: EventType) => {
+    setType(next);
+    if (!event) {
+      const nextPlan = reminderDefaults?.[next] ?? [15];
+      setReminderMinutesList(nextPlan);
+      setReminderMinutes(String(nextPlan[0] ?? 0));
+    }
+  };
 
   const save = async () => {
     if (!title.trim() || !date.match(/^\d{4}-\d{2}-\d{2}$/)) return;
@@ -140,7 +150,7 @@ export function EventEditor({
                 const meta = EVENT_META[option];
                 const active = type === option;
                 return (
-                  <Pressable key={option} onPress={() => setType(option)} style={[styles.typePill, active && { borderColor: meta.color, backgroundColor: meta.soft }]}>
+                  <Pressable key={option} onPress={() => changeType(option)} style={[styles.typePill, active && { borderColor: meta.color, backgroundColor: meta.soft }]}>
                     <IconSymbol name={meta.icon as never} size={18} color={active ? meta.color : PALETTE.muted} />
                     <Text style={[styles.typeText, active && { color: meta.color }]}>{meta.label}</Text>
                   </Pressable>

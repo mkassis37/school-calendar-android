@@ -10,7 +10,8 @@ import { createTRPCClient } from "@/lib/trpc";
 
 export type EventType = "lesson" | "homework" | "exam" | "evaluation" | "activity";
 export type NotificationSound = "homework" | "exam";
-export type ReminderDefaults = { homework: number; exam: number };
+export type ReminderDefaults = Record<EventType, number[]>;
+type LegacyReminderDefaults = { homework: number; exam: number };
 
 export type CalendarEvent = {
   id: string;
@@ -44,7 +45,7 @@ type CalendarContextValue = {
   requestNotifications: () => Promise<boolean>;
   setSubjectColor: (subject: string, color: string) => Promise<void>;
   setNotificationSound: (kind: NotificationSound, sound: string) => Promise<void>;
-  setReminderDefault: (kind: keyof ReminderDefaults, minutes: number) => Promise<void>;
+  setReminderPlan: (kind: EventType, minutes: number[]) => Promise<void>;
   addSubject: (subject: string, color: string) => Promise<void>;
   removeSubject: (subject: string) => Promise<void>;
   exportData: () => Promise<void>;
@@ -87,10 +88,11 @@ function isValidColorMap(value: unknown): value is Record<string, string> {
   return !!value && typeof value === "object" && Object.keys(value).length <= 200 && Object.entries(value).every(([name, color]) => name.length > 0 && name.length <= 100 && typeof color === "string" && HEX_COLOR.test(color));
 }
 
-function isValidReminderDefaults(value: unknown): value is ReminderDefaults {
+function isValidReminderDefaults(value: unknown): value is ReminderDefaults | LegacyReminderDefaults {
   if (!value || typeof value !== "object") return false;
-  const defaults = value as Partial<ReminderDefaults>;
-  return typeof defaults.homework === "number" && Number.isInteger(defaults.homework) && defaults.homework >= 0 && defaults.homework <= 10080 && typeof defaults.exam === "number" && Number.isInteger(defaults.exam) && defaults.exam >= 0 && defaults.exam <= 10080;
+  const defaults = value as Record<string, unknown>;
+  if (typeof defaults.homework === "number" && typeof defaults.exam === "number") return [defaults.homework, defaults.exam].every((minutes) => Number.isInteger(minutes) && minutes >= 0 && minutes <= 10080);
+  return EVENT_TYPES.size === Object.keys(defaults).length && [...EVENT_TYPES].every((type) => Array.isArray(defaults[type]) && (defaults[type] as unknown[]).length <= 8 && (defaults[type] as unknown[]).every((minutes) => typeof minutes === "number" && Number.isInteger(minutes) && minutes >= 0 && minutes <= 10080));
 }
 
 function isNotificationSounds(value: unknown): value is Record<NotificationSound, string> {
@@ -119,8 +121,17 @@ const ALARM_KEY = "school-calendar-alarm-v1";
 const ALARM_TIME_KEY = "school-calendar-alarm-time-v1";
 const TIME_FORMAT_KEY = "school-calendar-time-format-v1";
 const DEFAULT_NOTIFICATION_SOUNDS: Record<NotificationSound, string> = { homework: "homework_soft.wav", exam: "exam_alert.wav" };
-const DEFAULT_REMINDER_DEFAULTS: ReminderDefaults = { homework: 60, exam: 1440 };
+const DEFAULT_REMINDER_DEFAULTS: ReminderDefaults = { lesson: [15], homework: [60], exam: [1440, 180, 30], evaluation: [180, 30], activity: [60] };
 const DEFAULT_SUBJECT_COLORS: Record<string, string> = {};
+
+function normalizeReminderDefaults(value: unknown): ReminderDefaults {
+  if (!isValidReminderDefaults(value)) return DEFAULT_REMINDER_DEFAULTS;
+  const defaults = value as Record<string, unknown>;
+  if (typeof defaults.homework === "number" && typeof defaults.exam === "number") {
+    return { ...DEFAULT_REMINDER_DEFAULTS, homework: defaults.homework > 0 ? [defaults.homework] : [], exam: defaults.exam > 0 ? [defaults.exam] : [] };
+  }
+  return { ...DEFAULT_REMINDER_DEFAULTS, ...Object.fromEntries([...EVENT_TYPES].map((type) => [type, [...(defaults[type] as number[])]])) } as ReminderDefaults;
+}
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -217,9 +228,7 @@ function withoutNotificationIds(event: CalendarEvent): CalendarEvent {
 }
 
 function reminderDefaultsForType(type: EventType, defaults: ReminderDefaults): number[] {
-  if (type === "exam") return [defaults.exam];
-  if (type === "homework") return [defaults.homework];
-  return [15];
+  return defaults[type];
 }
 
 const CalendarContext = createContext<CalendarContextValue | null>(null);
@@ -252,7 +261,9 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       setNotificationsEnabled(storedNotifications === "true");
       setSubjectColors(storedSubjectColors ? { ...DEFAULT_SUBJECT_COLORS, ...safeStoredJson(storedSubjectColors, {}, isValidColorMap) } : DEFAULT_SUBJECT_COLORS);
       setNotificationSounds(storedNotificationSounds ? safeStoredJson(storedNotificationSounds, DEFAULT_NOTIFICATION_SOUNDS, isNotificationSounds) : DEFAULT_NOTIFICATION_SOUNDS);
-      setReminderDefaults(storedReminderDefaults ? { ...DEFAULT_REMINDER_DEFAULTS, ...safeStoredJson(storedReminderDefaults, DEFAULT_REMINDER_DEFAULTS, isValidReminderDefaults) } : DEFAULT_REMINDER_DEFAULTS);
+      let parsedReminderDefaults: unknown = null;
+      try { parsedReminderDefaults = storedReminderDefaults ? JSON.parse(storedReminderDefaults) : null; } catch { parsedReminderDefaults = null; }
+      setReminderDefaults(normalizeReminderDefaults(parsedReminderDefaults));
       setAlarmEnabled(storedAlarm === "true"); setAlarmTime(storedAlarmTime ?? "07:00");
       setTimeFormatState(storedTimeFormat === "12" ? 12 : 24);
       setHydrated(true);
@@ -263,7 +274,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     const instances = input.repeatWeekly ? Array.from({ length: 8 }, (_, index) => ({ ...input, date: toDateKey(addDays(parseDateKey(input.date), index * 7)) })) : [input];
     const created: CalendarEvent[] = [];
     for (const instance of instances) {
-      const event: CalendarEvent = { ...instance, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, done: false };
+      const event: CalendarEvent = { ...instance, reminderMinutesList: instance.reminderMinutesList?.length ? instance.reminderMinutesList : reminderDefaultsForType(instance.type, reminderDefaults), id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, done: false };
       const notificationIds = notificationsEnabled ? await scheduleEventReminder(event, notificationSounds) : [];
       created.push(withNotificationIds(event, notificationIds));
     }
@@ -344,8 +355,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(NOTIFICATION_SOUNDS_KEY, JSON.stringify(next));
   };
 
-  const setReminderDefault = async (kind: keyof ReminderDefaults, minutes: number) => {
-    const next = { ...reminderDefaults, [kind]: minutes };
+  const setReminderPlan = async (kind: EventType, minutes: number[]) => {
+    const next = { ...reminderDefaults, [kind]: [...new Set(minutes.filter((value) => Number.isInteger(value) && value >= 0 && value <= 10080))].sort((a, b) => b - a) };
     setReminderDefaults(next);
     await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(next));
   };
@@ -368,7 +379,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       const cleanEvent = withoutNotificationIds(event);
       return withNotificationIds(cleanEvent, notificationsEnabled ? await scheduleEventReminder(cleanEvent, notificationSounds) : []);
     }));
-    setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(parsed.reminderDefaults);
+    setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(normalizeReminderDefaults(parsed.reminderDefaults));
     await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
     return { events: nextEvents.length, subjects: Object.keys(nextColors).length };
   };
@@ -393,7 +404,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
         return withNotificationIds(cleanEvent, notificationsEnabled ? await scheduleEventReminder(cleanEvent, notificationSounds) : []);
       }));
       if (!(await confirmReplacement())) return { imported: false, message: "تم إلغاء الاستيراد" };
-      setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(parsed.reminderDefaults);
+      setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(normalizeReminderDefaults(parsed.reminderDefaults));
       await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
       return { imported: true, message: `تم استيراد ${nextEvents.length} موعدًا و${Object.keys(nextColors).length} مادة` };
     } catch { return { imported: false, message: "تعذر قراءة ملف الاستيراد" }; }
@@ -425,7 +436,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [hydrated, events, subjectColors, reminderDefaults]);
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderDefault, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderPlan, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 
