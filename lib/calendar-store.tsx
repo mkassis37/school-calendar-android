@@ -209,6 +209,8 @@ async function refreshMorningSummaries(events: CalendarEvent[]) {
   const now = new Date();
   for (let offset = 0; offset < MORNING_SUMMARY_DAYS; offset += 1) {
     const day = addDays(new Date(now.getFullYear(), now.getMonth(), now.getDate()), offset);
+    const triggerDate = new Date(day.getFullYear(), day.getMonth(), day.getDate(), MORNING_SUMMARY_HOUR, MORNING_SUMMARY_MINUTE, 0, 0);
+    if (triggerDate.getTime() <= now.getTime()) continue;
     const key = toDateKey(day);
     const dayEvents = events
       .filter((event) => event.date === key && !event.done)
@@ -225,7 +227,7 @@ async function refreshMorningSummaries(events: CalendarEvent[]) {
         },
         trigger: {
           type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: new Date(day.getFullYear(), day.getMonth(), day.getDate(), MORNING_SUMMARY_HOUR, MORNING_SUMMARY_MINUTE, 0, 0),
+          date: triggerDate,
         },
       });
       ids.push(id);
