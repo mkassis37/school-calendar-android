@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, EVENT_META, homeworkProgress, notificationSoundForType, startOfWeek, toDateKey, weeklyStudySummary } from "../lib/calendar-utils";
+import { addDays, EVENT_META, homeworkProgress, normalizeReminderMinutes, notificationSoundForType, startOfWeek, toDateKey, weeklyStudySummary } from "../lib/calendar-utils";
 
 describe("calendar helpers", () => {
   it("formats a local date as an ISO calendar key", () => {
@@ -34,6 +34,12 @@ describe("calendar helpers", () => {
     const sounds = { homework: "homework_soft.wav", exam: "exam_alert.wav" };
     expect(notificationSoundForType("homework", sounds)).toBe("homework_soft.wav");
     expect(notificationSoundForType("exam", sounds)).toBe("exam_alert.wav");
+  });
+
+  it("normalizes multiple reminder times and keeps legacy single reminders", () => {
+    expect(normalizeReminderMinutes({ reminderMinutes: 60, reminderMinutesList: [30, 1440, 30, 0] })).toEqual([1440, 30]);
+    expect(normalizeReminderMinutes({ reminderMinutes: 15 })).toEqual([15]);
+    expect(normalizeReminderMinutes({ reminderMinutes: 0, reminderMinutesList: [] })).toEqual([]);
   });
 
   it("summarizes only the current Monday-to-Sunday school week", () => {

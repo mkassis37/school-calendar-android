@@ -5,7 +5,7 @@ import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import * as Sharing from "expo-sharing";
 import * as DocumentPicker from "expo-document-picker";
-import { notificationSoundForType } from "@/lib/calendar-utils";
+import { normalizeReminderMinutes, notificationSoundForType } from "@/lib/calendar-utils";
 import { createTRPCClient } from "@/lib/trpc";
 
 export type EventType = "lesson" | "homework" | "exam" | "evaluation" | "activity";
@@ -21,12 +21,14 @@ export type CalendarEvent = {
   type: EventType;
   done: boolean;
   reminderMinutes: number;
+  reminderMinutesList?: number[];
   notes?: string;
   notificationId?: string;
+  notificationIds?: string[];
   repeatWeekly?: boolean;
 };
 
-export type NewEvent = Omit<CalendarEvent, "id" | "done" | "notificationId"> & { repeatWeekly?: boolean };
+export type NewEvent = Omit<CalendarEvent, "id" | "done" | "notificationId" | "notificationIds"> & { repeatWeekly?: boolean };
 
 type CalendarContextValue = {
   events: CalendarEvent[];
@@ -75,7 +77,9 @@ function isValidEvent(value: unknown): value is CalendarEvent {
     typeof event.time === "string" && TIME_KEY.test(event.time) &&
     typeof event.type === "string" && EVENT_TYPES.has(event.type as EventType) &&
     typeof event.done === "boolean" && typeof reminderMinutes === "number" && Number.isInteger(reminderMinutes) && reminderMinutes >= 0 && reminderMinutes <= 10080 &&
+    (event.reminderMinutesList === undefined || (Array.isArray(event.reminderMinutesList) && event.reminderMinutesList.length <= 8 && event.reminderMinutesList.every((item) => typeof item === "number" && Number.isInteger(item) && item >= 0 && item <= 10080))) &&
     (event.notes === undefined || (typeof event.notes === "string" && event.notes.length <= 10000)) &&
+    (event.notificationIds === undefined || (Array.isArray(event.notificationIds) && event.notificationIds.length <= 8 && event.notificationIds.every((item) => typeof item === "string" && item.length <= 200))) &&
     (event.repeatWeekly === undefined || typeof event.repeatWeekly === "boolean");
 }
 
@@ -163,34 +167,59 @@ async function persist(events: CalendarEvent[]) {
 }
 
 async function scheduleEventReminder(event: CalendarEvent, notificationSounds = DEFAULT_NOTIFICATION_SOUNDS) {
-  if (Platform.OS === "web" || event.reminderMinutes <= 0) return undefined;
+  if (Platform.OS === "web") return [];
+  const reminderMinutes = normalizeReminderMinutes(event);
+  if (reminderMinutes.length === 0) return [];
   const [hours, minutes] = event.time.split(":").map(Number);
   const eventDate = parseDateKey(event.date);
   eventDate.setHours(hours, minutes, 0, 0);
-  const triggerDate = new Date(eventDate.getTime() - event.reminderMinutes * 60_000);
-  if (triggerDate.getTime() <= Date.now()) return undefined;
-  try {
-    return await Notifications.scheduleNotificationAsync({
-      content: {
-        title: `تذكير: ${event.title}`,
-        body: `${event.subject} · بعد ${event.reminderMinutes >= 60 ? `${event.reminderMinutes / 60} ساعة` : `${event.reminderMinutes} دقيقة`}`,
-        sound: notificationSoundForType(event.type, notificationSounds),
-        data: { eventId: event.id, eventType: event.type },
-      },
-      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: triggerDate, channelId: event.type === "exam" ? "school-calendar-exam" : "school-calendar-homework" },
-    });
-  } catch {
-    return undefined;
+  const ids: string[] = [];
+  for (const minutes of reminderMinutes) {
+    const triggerDate = new Date(eventDate.getTime() - minutes * 60_000);
+    if (triggerDate.getTime() <= Date.now()) continue;
+    try {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: `تذكير: ${event.title}`,
+          body: `${event.subject} · قبل ${minutes >= 1440 ? `${minutes / 1440} يوم` : minutes >= 60 ? `${minutes / 60} ساعة` : `${minutes} دقيقة`}`,
+          sound: notificationSoundForType(event.type, notificationSounds),
+          data: { eventId: event.id, eventType: event.type, reminderMinutes: minutes },
+        },
+        trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: triggerDate, channelId: event.type === "exam" ? "school-calendar-exam" : "school-calendar-homework" },
+      });
+      ids.push(id);
+    } catch {
+      // Keep scheduling the remaining reminders if one trigger fails.
+    }
   }
+  return ids;
 }
 
-async function cancelReminder(notificationId?: string) {
-  if (!notificationId || Platform.OS === "web") return;
-  try {
-    await Notifications.cancelScheduledNotificationAsync(notificationId);
-  } catch {
-    // The notification may already have fired or been removed by Android.
-  }
+async function cancelReminders(event?: Pick<CalendarEvent, "notificationId" | "notificationIds">) {
+  if (Platform.OS === "web" || !event) return;
+  const ids = [...(event.notificationIds ?? []), ...(event.notificationId ? [event.notificationId] : [])];
+  await Promise.all(ids.map(async (id) => {
+    try {
+      await Notifications.cancelScheduledNotificationAsync(id);
+    } catch {
+      // The notification may already have fired or been removed by Android.
+    }
+  }));
+}
+
+function withNotificationIds(event: CalendarEvent, ids: string[]): CalendarEvent {
+  return { ...event, notificationId: ids[0], notificationIds: ids.length > 0 ? ids : undefined };
+}
+
+function withoutNotificationIds(event: CalendarEvent): CalendarEvent {
+  const { notificationId: _notificationId, notificationIds: _notificationIds, ...portable } = event;
+  return portable;
+}
+
+function reminderDefaultsForType(type: EventType, defaults: ReminderDefaults): number[] {
+  if (type === "exam") return [defaults.exam];
+  if (type === "homework") return [defaults.homework];
+  return [15];
 }
 
 const CalendarContext = createContext<CalendarContextValue | null>(null);
@@ -235,8 +264,8 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     const created: CalendarEvent[] = [];
     for (const instance of instances) {
       const event: CalendarEvent = { ...instance, id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, done: false };
-      if (notificationsEnabled) event.notificationId = await scheduleEventReminder(event, notificationSounds);
-      created.push(event);
+      const notificationIds = notificationsEnabled ? await scheduleEventReminder(event, notificationSounds) : [];
+      created.push(withNotificationIds(event, notificationIds));
     }
     const next = [...events, ...created];
     setEvents(next);
@@ -246,8 +275,10 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const updateEvent = async (id: string, input: NewEvent) => {
     const current = events.find((event) => event.id === id);
     if (!current) return;
-    await cancelReminder(current.notificationId);
-    const updated: CalendarEvent = { ...current, ...input, notificationId: notificationsEnabled ? await scheduleEventReminder({ ...current, ...input }, notificationSounds) : undefined };
+    await cancelReminders(current);
+    const draft: CalendarEvent = { ...current, ...input };
+    const notificationIds = notificationsEnabled ? await scheduleEventReminder(draft, notificationSounds) : [];
+    const updated = withNotificationIds(draft, notificationIds);
     const next = events.map((event) => (event.id === id ? updated : event));
     setEvents(next);
     await persist(next);
@@ -255,7 +286,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   const deleteEvent = async (id: string) => {
     const current = events.find((event) => event.id === id);
-    await cancelReminder(current?.notificationId);
+    await cancelReminders(current);
     const next = events.filter((event) => event.id !== id);
     setEvents(next);
     await persist(next);
@@ -286,9 +317,17 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     setNotificationsEnabled(enabled);
     await AsyncStorage.setItem(NOTIFICATION_KEY, String(enabled));
     if (enabled) {
-      const refreshed = await Promise.all(events.map(async (event) => ({ ...event, notificationId: await scheduleEventReminder(event, notificationSounds) })));
+      const refreshed = await Promise.all(events.map(async (event) => {
+        await cancelReminders(event);
+        return withNotificationIds(event, await scheduleEventReminder(event, notificationSounds));
+      }));
       setEvents(refreshed);
       await persist(refreshed);
+    } else {
+      await Promise.all(events.map((event) => cancelReminders(event)));
+      const cleared = events.map((event) => withNotificationIds(event, []));
+      setEvents(cleared);
+      await persist(cleared);
     }
     return enabled;
   };
@@ -315,7 +354,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const removeSubject = async (subject: string) => { if (Object.keys(DEFAULT_SUBJECT_COLORS).includes(subject)) return; const next = { ...subjectColors }; delete next[subject]; setSubjectColors(next); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(next)); };
 
   const buildTransferPayload = () => {
-    const portableEvents = events.map(({ notificationId: _notificationId, ...event }) => event);
+    const portableEvents = events.map(withoutNotificationIds);
     return { format: "school-calendar" as const, version: 1 as const, exportedAt: new Date().toISOString(), events: portableEvents, subjectColors, reminderDefaults };
   };
   const getCloudPayload = () => JSON.stringify(buildTransferPayload());
@@ -324,7 +363,11 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     try { parsed = JSON.parse(raw); } catch { throw new Error("النسخة السحابية غير صالحة"); }
     if (!isValidTransferData(parsed)) throw new Error("تحتوي النسخة السحابية على بيانات غير صالحة");
     const nextColors = parsed.subjectColors;
-    const nextEvents = parsed.events;
+    const nextEvents = await Promise.all(parsed.events.map(async (event) => {
+      await cancelReminders(event);
+      const cleanEvent = withoutNotificationIds(event);
+      return withNotificationIds(cleanEvent, notificationsEnabled ? await scheduleEventReminder(cleanEvent, notificationSounds) : []);
+    }));
     setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(parsed.reminderDefaults);
     await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
     return { events: nextEvents.length, subjects: Object.keys(nextColors).length };
@@ -344,7 +387,11 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       const parsed: unknown = JSON.parse(raw);
       if (!isValidTransferData(parsed)) return { imported: false, message: "يحتوي الملف على موعد أو مادة غير صالحة" };
       const nextColors = parsed.subjectColors;
-      const nextEvents = parsed.events;
+      const nextEvents = await Promise.all(parsed.events.map(async (event) => {
+        await cancelReminders(event);
+        const cleanEvent = withoutNotificationIds(event);
+        return withNotificationIds(cleanEvent, notificationsEnabled ? await scheduleEventReminder(cleanEvent, notificationSounds) : []);
+      }));
       if (!(await confirmReplacement())) return { imported: false, message: "تم إلغاء الاستيراد" };
       setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(parsed.reminderDefaults);
       await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));

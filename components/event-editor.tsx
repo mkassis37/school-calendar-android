@@ -47,6 +47,7 @@ export function EventEditor({
   const [time, setTime] = useState("08:00");
   const [type, setType] = useState<EventType>("lesson");
   const [reminderMinutes, setReminderMinutes] = useState("15");
+  const [reminderMinutesList, setReminderMinutesList] = useState<number[]>([15]);
   const [notes, setNotes] = useState("");
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [dateMenu, setDateMenu] = useState<"day" | "month" | "year" | null>(null);
@@ -66,7 +67,10 @@ export function EventEditor({
     setTimeFormat(preferredTimeFormat);
     const initialHour = Number((event?.time ?? "08:00").split(":")[0]); setPeriod(initialHour >= 12 ? "PM" : "AM");
     setType(event?.type ?? "lesson");
-    setReminderMinutes(String(event?.reminderMinutes ?? (event?.type === "exam" ? reminderDefaults?.exam : event?.type === "homework" ? reminderDefaults?.homework : 15)));
+    const defaultReminder = event?.reminderMinutes ?? (event?.type === "exam" ? reminderDefaults?.exam : event?.type === "homework" ? reminderDefaults?.homework : 15) ?? 15;
+    const initialReminders = event?.reminderMinutesList ?? (defaultReminder > 0 ? [defaultReminder] : []);
+    setReminderMinutesList(initialReminders);
+    setReminderMinutes(String(initialReminders[0] ?? 0));
     setNotes(event?.notes ?? "");
     setRepeatWeekly(event?.repeatWeekly ?? false);
   }, [visible, event, defaultDate, reminderDefaults, preferredTimeFormat]);
@@ -81,6 +85,7 @@ export function EventEditor({
       time: time.match(/^\d{2}:\d{2}$/) ? time : "08:00",
       type,
       reminderMinutes: Math.max(0, Number(reminderMinutes) || 0),
+      reminderMinutesList,
       notes: notes.trim(),
       repeatWeekly,
     });
@@ -154,13 +159,18 @@ export function EventEditor({
               </View>
             </View>
 
-            <Text style={styles.label}>التنبيه قبل الموعد بالدقائق</Text>
+            <Text style={styles.label}>التنبيهات قبل الموعد</Text>
+            <Text style={styles.reminderHint}>يمكنك اختيار أكثر من وقت للتنبيه لنفس الموعد</Text>
             <View style={styles.reminderRow}>
-              {[0, 15, 30, 60, 1440].map((value) => (
-                <Pressable key={value} onPress={() => setReminderMinutes(String(value))} style={[styles.reminderPill, Number(reminderMinutes) === value && styles.reminderPillActive]}>
-                  <Text style={[styles.reminderText, Number(reminderMinutes) === value && styles.reminderTextActive]}>{value === 0 ? "بدون" : value === 1440 ? "يوم" : value}</Text>
-                </Pressable>
-              ))}
+              {[0, 15, 30, 60, 180, 1440, 10080].map((value) => {
+                const active = value === 0 ? reminderMinutesList.length === 0 : reminderMinutesList.includes(value);
+                const toggle = () => {
+                  if (value === 0) { setReminderMinutesList([]); setReminderMinutes("0"); return; }
+                  const next = reminderMinutesList.includes(value) ? reminderMinutesList.filter((item) => item !== value) : [...reminderMinutesList, value].sort((a, b) => b - a);
+                  setReminderMinutesList(next); setReminderMinutes(String(next[0] ?? 0));
+                };
+                return <Pressable key={value} onPress={toggle} style={[styles.reminderPill, active && styles.reminderPillActive]}><Text style={[styles.reminderText, active && styles.reminderTextActive]}>{value === 0 ? "بدون" : value === 10080 ? "أسبوع" : value === 1440 ? "يوم" : value === 180 ? "3 ساعات" : `${value} د`}</Text></Pressable>;
+              })}
             </View>
 
             <Pressable onPress={() => setRepeatWeekly((value) => !value)} style={styles.repeatRow}>
@@ -266,8 +276,9 @@ const styles = StyleSheet.create({
   formatTextActive: { color: PALETTE.teal },
   periodWrap: { width: 76, gap: 5 },
   periodPill: { flex: 1, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 9, alignItems: "center", justifyContent: "center", paddingHorizontal: 5 },
-  reminderRow: { flexDirection: "row-reverse", gap: 7 },
-  reminderPill: { flex: 1, height: 38, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, alignItems: "center", justifyContent: "center" },
+  reminderHint: { color: PALETTE.muted, fontSize: 10, textAlign: "right", marginBottom: 8 },
+  reminderRow: { flexDirection: "row-reverse", flexWrap: "wrap", gap: 7 },
+  reminderPill: { minWidth: 67, height: 38, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, alignItems: "center", justifyContent: "center", paddingHorizontal: 7 },
   reminderPillActive: { backgroundColor: "#E5F6F2", borderColor: PALETTE.teal },
   reminderText: { color: PALETTE.muted, fontSize: 12, fontWeight: "700" },
   reminderTextActive: { color: PALETTE.teal },

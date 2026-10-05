@@ -30,6 +30,11 @@ export function notificationSoundForType(type: EventType, sounds: { homework: st
   return type === "exam" ? sounds.exam : sounds.homework;
 }
 
+export function normalizeReminderMinutes(event: { reminderMinutes: number; reminderMinutesList?: number[] }): number[] {
+  const values = event.reminderMinutesList ?? (event.reminderMinutes > 0 ? [event.reminderMinutes] : []);
+  return [...new Set(values.filter((minutes) => Number.isInteger(minutes) && minutes > 0 && minutes <= 10080))].sort((a, b) => b - a);
+}
+
 export function formatDisplayTime(time: string, format: 12 | 24) {
   const [rawHour, rawMinute] = time.split(":").map(Number);
   if (format === 24 || !Number.isFinite(rawHour) || !Number.isFinite(rawMinute)) return time;
