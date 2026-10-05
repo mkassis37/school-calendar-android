@@ -224,9 +224,8 @@ async function refreshMorningSummaries(events: CalendarEvent[]) {
           data: { type: "morning-summary", date: key },
         },
         trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DAILY,
-          hour: MORNING_SUMMARY_HOUR,
-          minute: MORNING_SUMMARY_MINUTE,
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: new Date(day.getFullYear(), day.getMonth(), day.getDate(), MORNING_SUMMARY_HOUR, MORNING_SUMMARY_MINUTE, 0, 0),
         },
       });
       ids.push(id);
