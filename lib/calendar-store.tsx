@@ -114,6 +114,10 @@ const REMINDER_DEFAULTS_KEY = "school-calendar-reminder-defaults-v1";
 const ALARM_KEY = "school-calendar-alarm-v1";
 const ALARM_TIME_KEY = "school-calendar-alarm-time-v1";
 const TIME_FORMAT_KEY = "school-calendar-time-format-v1";
+const MORNING_SUMMARY_KEY = "school-calendar-morning-summary-v1";
+const MORNING_SUMMARY_DAYS = 30;
+const MORNING_SUMMARY_HOUR = 7;
+const MORNING_SUMMARY_MINUTE = 0;
 const DEFAULT_NOTIFICATION_SOUNDS: Record<NotificationSound, string> = { homework: "homework_soft.wav", exam: "exam_alert.wav" };
 const DEFAULT_REMINDER_DEFAULTS: ReminderDefaults = { homework: 60, exam: 1440 };
 const DEFAULT_SUBJECT_COLORS: Record<string, string> = {};
@@ -184,6 +188,53 @@ async function scheduleEventReminder(event: CalendarEvent, notificationSounds = 
   }
 }
 
+async function refreshMorningSummaries(events: CalendarEvent[]) {
+  if (Platform.OS === "web") return;
+  const raw = await AsyncStorage.getItem(MORNING_SUMMARY_KEY);
+  if (raw) {
+    try {
+      const ids = JSON.parse(raw) as unknown;
+      if (Array.isArray(ids)) {
+        await Promise.all(ids.filter((id): id is string => typeof id === "string").map(async (id) => {
+          try { await Notifications.cancelScheduledNotificationAsync(id); } catch {}
+        }));
+      }
+    } catch {}
+  }
+  if (!(await AsyncStorage.getItem(NOTIFICATION_KEY)).includes("true")) {
+    await AsyncStorage.setItem(MORNING_SUMMARY_KEY, "[]");
+    return;
+  }
+  const ids: string[] = [];
+  const now = new Date();
+  for (let offset = 0; offset < MORNING_SUMMARY_DAYS; offset += 1) {
+    const day = addDays(new Date(now.getFullYear(), now.getMonth(), now.getDate()), offset);
+    const key = toDateKey(day);
+    const dayEvents = events
+      .filter((event) => event.date === key && !event.done)
+      .sort((a, b) => a.time.localeCompare(b.time));
+    const body = dayEvents.length
+      ? dayEvents.map((event) => `${event.time} · ${event.title}${event.subject ? ` (${event.subject})` : ""}`).join(" | ")
+      : "لا توجد مواعيد دراسية مسجلة لهذا اليوم.";
+    try {
+      const id = await Notifications.scheduleNotificationAsync({
+        content: {
+          title: offset === 0 ? "مواعيد اليوم الدراسي" : "تذكير باليوم الدراسي",
+          body,
+          data: { type: "morning-summary", date: key },
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour: MORNING_SUMMARY_HOUR,
+          minute: MORNING_SUMMARY_MINUTE,
+        },
+      });
+      ids.push(id);
+    } catch {}
+  }
+  await AsyncStorage.setItem(MORNING_SUMMARY_KEY, JSON.stringify(ids));
+}
+
 async function cancelReminder(notificationId?: string) {
   if (!notificationId || Platform.OS === "web") return;
   try {
@@ -227,6 +278,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       setAlarmEnabled(storedAlarm === "true"); setAlarmTime(storedAlarmTime ?? "07:00");
       setTimeFormatState(storedTimeFormat === "12" ? 12 : 24);
       setHydrated(true);
+      if (storedNotifications === "true") await refreshMorningSummaries(safeStoredJson(storedEvents, seedEvents(), isEventArray));
     })();
   }, []);
 
@@ -241,6 +293,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     const next = [...events, ...created];
     setEvents(next);
     await persist(next);
+    await refreshMorningSummaries(next);
   };
 
   const updateEvent = async (id: string, input: NewEvent) => {
@@ -251,6 +304,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     const next = events.map((event) => (event.id === id ? updated : event));
     setEvents(next);
     await persist(next);
+    await refreshMorningSummaries(next);
   };
 
   const deleteEvent = async (id: string) => {
@@ -259,12 +313,14 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     const next = events.filter((event) => event.id !== id);
     setEvents(next);
     await persist(next);
+    await refreshMorningSummaries(next);
   };
 
   const toggleEvent = async (id: string) => {
     const next = events.map((event) => (event.id === id ? { ...event, done: !event.done } : event));
     setEvents(next);
     await persist(next);
+    await refreshMorningSummaries(next);
   };
 
   const requestNotifications = async () => {
@@ -289,6 +345,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       const refreshed = await Promise.all(events.map(async (event) => ({ ...event, notificationId: await scheduleEventReminder(event, notificationSounds) })));
       setEvents(refreshed);
       await persist(refreshed);
+      await refreshMorningSummaries(refreshed);
     }
     return enabled;
   };
@@ -326,7 +383,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     const nextColors = parsed.subjectColors;
     const nextEvents = parsed.events;
     setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(parsed.reminderDefaults);
-    await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
+    await persist(nextEvents); await refreshMorningSummaries(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
     return { events: nextEvents.length, subjects: Object.keys(nextColors).length };
   };
   const exportData = async () => {
@@ -347,7 +404,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       const nextEvents = parsed.events;
       if (!(await confirmReplacement())) return { imported: false, message: "تم إلغاء الاستيراد" };
       setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(parsed.reminderDefaults);
-      await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
+      await persist(nextEvents); await refreshMorningSummaries(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
       return { imported: true, message: `تم استيراد ${nextEvents.length} موعدًا و${Object.keys(nextColors).length} مادة` };
     } catch { return { imported: false, message: "تعذر قراءة ملف الاستيراد" }; }
   };
