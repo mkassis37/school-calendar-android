@@ -44,6 +44,12 @@ export function formatDisplayTime(time: string, format: 12 | 24) {
 }
 
 
+export function dailyReminderSummary(events: Array<{ id: string; date: string; time: string; title: string; type: EventType; reminderMinutes: number; reminderMinutesList?: number[] }>, referenceDate = new Date()) {
+  const key = toDateKey(referenceDate);
+  const reminders = events.flatMap((event) => (event.date === key ? normalizeReminderMinutes(event).map((minutes) => ({ event, minutes })) : []));
+  return reminders.sort((a, b) => `${a.event.time}`.localeCompare(`${b.event.time}`) || b.minutes - a.minutes);
+}
+
 export function weeklyStudySummary(events: Array<{ date: string; type: EventType; done: boolean }>, referenceDate = new Date()) {
   const weekStart = startOfWeek(referenceDate);
   const weekKeys = new Set(Array.from({ length: 7 }, (_, index) => toDateKey(addDays(weekStart, index))));

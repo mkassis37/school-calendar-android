@@ -31,6 +31,7 @@ export function EventEditor({
   onClose,
   onSave,
   reminderDefaults,
+  subjectReminderPlans,
   preferredTimeFormat = 24,
 }: {
   visible: boolean;
@@ -39,6 +40,7 @@ export function EventEditor({
   onClose: () => void;
   onSave: (value: NewEvent) => Promise<void>;
   reminderDefaults?: ReminderDefaults;
+  subjectReminderPlans?: Record<string, number[]>;
   preferredTimeFormat?: 12 | 24;
 }) {
   const [title, setTitle] = useState("");
@@ -46,6 +48,7 @@ export function EventEditor({
   const [date, setDate] = useState(defaultDate);
   const [time, setTime] = useState("08:00");
   const [type, setType] = useState<EventType>("lesson");
+  const [importance, setImportance] = useState<"normal" | "important" | "critical">("normal");
   const [reminderMinutes, setReminderMinutes] = useState("15");
   const [reminderMinutesList, setReminderMinutesList] = useState<number[]>([15]);
   const [notes, setNotes] = useState("");
@@ -67,14 +70,15 @@ export function EventEditor({
     setTimeFormat(preferredTimeFormat);
     const initialHour = Number((event?.time ?? "08:00").split(":")[0]); setPeriod(initialHour >= 12 ? "PM" : "AM");
     setType(event?.type ?? "lesson");
-    const configuredReminders = reminderDefaults?.[event?.type ?? "lesson"] ?? [15];
+    setImportance(event?.importance ?? "normal");
+    const configuredReminders = event?.subject ? (subjectReminderPlans?.[event.subject] ?? reminderDefaults?.[event?.type ?? "lesson"] ?? [15]) : (reminderDefaults?.[event?.type ?? "lesson"] ?? [15]);
     const defaultReminder = event?.reminderMinutes ?? configuredReminders[0] ?? 0;
     const initialReminders = event?.reminderMinutesList ?? (defaultReminder > 0 ? configuredReminders : []);
     setReminderMinutesList(initialReminders);
     setReminderMinutes(String(initialReminders[0] ?? 0));
     setNotes(event?.notes ?? "");
     setRepeatWeekly(event?.repeatWeekly ?? false);
-  }, [visible, event, defaultDate, reminderDefaults, preferredTimeFormat]);
+  }, [visible, event, defaultDate, reminderDefaults, subjectReminderPlans, preferredTimeFormat]);
 
   const changeType = (next: EventType) => {
     setType(next);
@@ -94,6 +98,7 @@ export function EventEditor({
       date,
       time: time.match(/^\d{2}:\d{2}$/) ? time : "08:00",
       type,
+      importance: type === "exam" ? importance : undefined,
       reminderMinutes: Math.max(0, Number(reminderMinutes) || 0),
       reminderMinutesList,
       notes: notes.trim(),
@@ -158,6 +163,7 @@ export function EventEditor({
               })}
             </View>
 
+            {type === "exam" ? <><Text style={styles.label}>أهمية الامتحان</Text><View style={styles.typeGrid}>{(["normal", "important", "critical"] as const).map((level) => <Pressable key={level} onPress={() => setImportance(level)} style={[styles.typePill, importance === level && styles.examImportanceActive]}><Text style={[styles.typeText, importance === level && styles.formatTextActive]}>{level === "normal" ? "عادي" : level === "important" ? "مهم" : "حرج"}</Text></Pressable>)}</View></> : null}
             <View style={styles.row}>
               <View style={styles.half}>
                 <Text style={styles.label}>الوقت</Text>
@@ -232,6 +238,7 @@ const styles = StyleSheet.create({
   input: { minHeight: 48, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 14, paddingHorizontal: 14, color: PALETTE.ink, fontSize: 15, backgroundColor: "#FBFCFE" },
   notes: { minHeight: 82, paddingTop: 12, textAlignVertical: "top" },
   typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" },
+  examImportanceActive: { backgroundColor: "#FCECF2", borderColor: "#C04A75" },
   typePill: { flexDirection: "row-reverse", alignItems: "center", gap: 6, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 13, paddingHorizontal: 11, paddingVertical: 9 },
   typeText: { color: PALETTE.muted, fontSize: 12, fontWeight: "700" },
   row: { flexDirection: "row-reverse", gap: 10 },

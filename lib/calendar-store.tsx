@@ -9,6 +9,7 @@ import { normalizeReminderMinutes, notificationSoundForType } from "@/lib/calend
 import { createTRPCClient } from "@/lib/trpc";
 
 export type EventType = "lesson" | "homework" | "exam" | "evaluation" | "activity";
+export type ExamImportance = "normal" | "important" | "critical";
 export type NotificationSound = "homework" | "exam";
 export type ReminderDefaults = Record<EventType, number[]>;
 type LegacyReminderDefaults = { homework: number; exam: number };
@@ -20,6 +21,7 @@ export type CalendarEvent = {
   date: string;
   time: string;
   type: EventType;
+  importance?: ExamImportance;
   done: boolean;
   reminderMinutes: number;
   reminderMinutesList?: number[];
@@ -36,6 +38,7 @@ type CalendarContextValue = {
   hydrated: boolean;
   notificationsEnabled: boolean;
   subjectColors: Record<string, string>;
+  subjectReminderPlans: Record<string, number[]>;
   notificationSounds: Record<NotificationSound, string>;
   reminderDefaults: ReminderDefaults;
   addEvent: (event: NewEvent) => Promise<void>;
@@ -46,6 +49,7 @@ type CalendarContextValue = {
   setSubjectColor: (subject: string, color: string) => Promise<void>;
   setNotificationSound: (kind: NotificationSound, sound: string) => Promise<void>;
   setReminderPlan: (kind: EventType, minutes: number[]) => Promise<void>;
+  setSubjectReminderPlan: (subject: string, minutes: number[]) => Promise<void>;
   addSubject: (subject: string, color: string) => Promise<void>;
   removeSubject: (subject: string) => Promise<void>;
   exportData: () => Promise<void>;
@@ -81,7 +85,8 @@ function isValidEvent(value: unknown): value is CalendarEvent {
     (event.reminderMinutesList === undefined || (Array.isArray(event.reminderMinutesList) && event.reminderMinutesList.length <= 8 && event.reminderMinutesList.every((item) => typeof item === "number" && Number.isInteger(item) && item >= 0 && item <= 10080))) &&
     (event.notes === undefined || (typeof event.notes === "string" && event.notes.length <= 10000)) &&
     (event.notificationIds === undefined || (Array.isArray(event.notificationIds) && event.notificationIds.length <= 8 && event.notificationIds.every((item) => typeof item === "string" && item.length <= 200))) &&
-    (event.repeatWeekly === undefined || typeof event.repeatWeekly === "boolean");
+    (event.repeatWeekly === undefined || typeof event.repeatWeekly === "boolean") &&
+    (event.importance === undefined || event.importance === "normal" || event.importance === "important" || event.importance === "critical");
 }
 
 function isValidColorMap(value: unknown): value is Record<string, string> {
@@ -117,6 +122,7 @@ const NOTIFICATION_KEY = "school-calendar-notifications-v1";
 const SUBJECT_COLORS_KEY = "school-calendar-subject-colors-v1";
 const NOTIFICATION_SOUNDS_KEY = "school-calendar-notification-sounds-v1";
 const REMINDER_DEFAULTS_KEY = "school-calendar-reminder-defaults-v1";
+const SUBJECT_REMINDER_PLANS_KEY = "school-calendar-subject-reminder-plans-v1";
 const ALARM_KEY = "school-calendar-alarm-v1";
 const ALARM_TIME_KEY = "school-calendar-alarm-time-v1";
 const TIME_FORMAT_KEY = "school-calendar-time-format-v1";
@@ -231,6 +237,13 @@ function reminderDefaultsForType(type: EventType, defaults: ReminderDefaults): n
   return defaults[type];
 }
 
+function reminderPlanForEvent(event: Pick<CalendarEvent, "type" | "subject" | "importance">, defaults: ReminderDefaults, subjectPlans: Record<string, number[]>) {
+  const base = subjectPlans[event.subject] ?? reminderDefaultsForType(event.type, defaults);
+  if (event.type !== "exam" || !event.importance || event.importance === "normal") return base;
+  const extra = event.importance === "critical" ? [10080, 2880] : [2880];
+  return [...new Set([...base, ...extra])].sort((a, b) => b - a);
+}
+
 const CalendarContext = createContext<CalendarContextValue | null>(null);
 
 export function CalendarProvider({ children }: { children: ReactNode }) {
@@ -240,6 +253,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [subjectColors, setSubjectColors] = useState<Record<string, string>>(DEFAULT_SUBJECT_COLORS);
   const [notificationSounds, setNotificationSounds] = useState<Record<NotificationSound, string>>(DEFAULT_NOTIFICATION_SOUNDS);
   const [reminderDefaults, setReminderDefaults] = useState<ReminderDefaults>(DEFAULT_REMINDER_DEFAULTS);
+  const [subjectReminderPlans, setSubjectReminderPlans] = useState<Record<string, number[]>>({});
   const [alarmEnabled, setAlarmEnabled] = useState(false);
   const [alarmTime, setAlarmTime] = useState("07:00");
   const [timeFormat, setTimeFormatState] = useState<12 | 24>(24);
@@ -247,12 +261,13 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void (async () => {
-      const [storedEvents, storedNotifications, storedSubjectColors, storedNotificationSounds, storedReminderDefaults, storedAlarm, storedAlarmTime, storedTimeFormat] = await Promise.all([
+      const [storedEvents, storedNotifications, storedSubjectColors, storedNotificationSounds, storedReminderDefaults, storedSubjectReminderPlans, storedAlarm, storedAlarmTime, storedTimeFormat] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEY),
         AsyncStorage.getItem(NOTIFICATION_KEY),
         AsyncStorage.getItem(SUBJECT_COLORS_KEY),
         AsyncStorage.getItem(NOTIFICATION_SOUNDS_KEY),
         AsyncStorage.getItem(REMINDER_DEFAULTS_KEY),
+        AsyncStorage.getItem(SUBJECT_REMINDER_PLANS_KEY),
         AsyncStorage.getItem(ALARM_KEY),
         AsyncStorage.getItem(ALARM_TIME_KEY),
         AsyncStorage.getItem(TIME_FORMAT_KEY),
@@ -264,6 +279,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       let parsedReminderDefaults: unknown = null;
       try { parsedReminderDefaults = storedReminderDefaults ? JSON.parse(storedReminderDefaults) : null; } catch { parsedReminderDefaults = null; }
       setReminderDefaults(normalizeReminderDefaults(parsedReminderDefaults));
+      try { const parsedPlans = storedSubjectReminderPlans ? JSON.parse(storedSubjectReminderPlans) : {}; setSubjectReminderPlans(parsedPlans && typeof parsedPlans === "object" ? parsedPlans : {}); } catch { setSubjectReminderPlans({}); }
       setAlarmEnabled(storedAlarm === "true"); setAlarmTime(storedAlarmTime ?? "07:00");
       setTimeFormatState(storedTimeFormat === "12" ? 12 : 24);
       setHydrated(true);
@@ -274,7 +290,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     const instances = input.repeatWeekly ? Array.from({ length: 8 }, (_, index) => ({ ...input, date: toDateKey(addDays(parseDateKey(input.date), index * 7)) })) : [input];
     const created: CalendarEvent[] = [];
     for (const instance of instances) {
-      const event: CalendarEvent = { ...instance, reminderMinutesList: instance.reminderMinutesList?.length ? instance.reminderMinutesList : reminderDefaultsForType(instance.type, reminderDefaults), id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, done: false };
+      const event: CalendarEvent = { ...instance, reminderMinutesList: instance.reminderMinutesList?.length ? instance.reminderMinutesList : reminderPlanForEvent(instance, reminderDefaults, subjectReminderPlans), id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, done: false };
       const notificationIds = notificationsEnabled ? await scheduleEventReminder(event, notificationSounds) : [];
       created.push(withNotificationIds(event, notificationIds));
     }
@@ -355,6 +371,12 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     await AsyncStorage.setItem(NOTIFICATION_SOUNDS_KEY, JSON.stringify(next));
   };
 
+  const setSubjectReminderPlan = async (subject: string, minutes: number[]) => {
+    const clean = [...new Set(minutes.filter((value) => Number.isInteger(value) && value >= 0 && value <= 10080))].sort((a, b) => b - a);
+    const next = { ...subjectReminderPlans, [subject]: clean };
+    setSubjectReminderPlans(next);
+    await AsyncStorage.setItem(SUBJECT_REMINDER_PLANS_KEY, JSON.stringify(next));
+  };
   const setReminderPlan = async (kind: EventType, minutes: number[]) => {
     const next = { ...reminderDefaults, [kind]: [...new Set(minutes.filter((value) => Number.isInteger(value) && value >= 0 && value <= 10080))].sort((a, b) => b - a) };
     setReminderDefaults(next);
@@ -436,7 +458,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [hydrated, events, subjectColors, reminderDefaults]);
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderPlan, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderPlan, setSubjectReminderPlan, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, EVENT_META, homeworkProgress, normalizeReminderMinutes, notificationSoundForType, startOfWeek, toDateKey, weeklyStudySummary } from "../lib/calendar-utils";
+import { addDays, dailyReminderSummary, EVENT_META, homeworkProgress, normalizeReminderMinutes, notificationSoundForType, startOfWeek, toDateKey, weeklyStudySummary } from "../lib/calendar-utils";
 
 describe("calendar helpers", () => {
   it("formats a local date as an ISO calendar key", () => {
@@ -50,6 +50,12 @@ describe("calendar helpers", () => {
       { date: "2026-09-14", type: "exam" as const, done: false },
     ];
     expect(weeklyStudySummary(events, new Date(2026, 8, 11))).toMatchObject({ homeworkTotal: 2, homeworkDone: 1, homeworkPercent: 50, examTotal: 1, examDone: 1, examPercent: 100, total: 3, done: 2 });
+  });
+
+  it("lists reminders scheduled for today", () => {
+    const reminders = dailyReminderSummary([{ id: "1", date: "2026-09-11", time: "08:00", title: "امتحان", type: "exam", reminderMinutes: 60, reminderMinutesList: [60, 1440] }], new Date(2026, 8, 11));
+    expect(reminders).toHaveLength(2);
+    expect(reminders[0].minutes).toBe(1440);
   });
 
 });

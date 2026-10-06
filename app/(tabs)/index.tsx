@@ -9,7 +9,7 @@ import { formatDisplayTime, normalizeReminderMinutes } from "@/lib/calendar-util
 const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2", soft: "#EDF8F6", amber: "#D28A24" };
 
 export default function CalendarScreen() {
-  const { events, hydrated, subjectColors, reminderDefaults, timeFormat, addEvent, updateEvent, deleteEvent, toggleEvent } = useCalendar();
+  const { events, hydrated, subjectColors, subjectReminderPlans, reminderDefaults, timeFormat, addEvent, updateEvent, deleteEvent, toggleEvent } = useCalendar();
   const [selectedDate, setSelectedDate] = useState(toDateKey(new Date()));
   const [monthAnchor, setMonthAnchor] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [editorVisible, setEditorVisible] = useState(false);
@@ -80,7 +80,7 @@ export default function CalendarScreen() {
 
         <MonthPicker visible={monthPickerVisible} year={monthAnchor.getFullYear()} month={monthAnchor.getMonth()} onSelect={chooseMonth} onClose={() => setMonthPickerVisible(false)} />
       </View>
-      <EventEditor preferredTimeFormat={timeFormat} visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={selectedDate} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); const date = parseDateKey(value.date); setSelectedDate(value.date); setMonthAnchor(new Date(date.getFullYear(), date.getMonth(), 1)); setEditorVisible(false); }} />
+      <EventEditor subjectReminderPlans={subjectReminderPlans} preferredTimeFormat={timeFormat} visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={selectedDate} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); const date = parseDateKey(value.date); setSelectedDate(value.date); setMonthAnchor(new Date(date.getFullYear(), date.getMonth(), 1)); setEditorVisible(false); }} />
       <EventDetails event={detailsEvent} timeFormat={timeFormat} onClose={() => setDetailsEvent(null)} />
     </ScreenContainer>
   );
