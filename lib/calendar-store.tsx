@@ -39,6 +39,8 @@ type CalendarContextValue = {
   notificationsEnabled: boolean;
   subjectColors: Record<string, string>;
   subjectReminderPlans: Record<string, number[]>;
+  notificationHistory: Array<{ id: string; title: string; body: string; receivedAt: string; eventId?: string }>;
+  clearNotificationHistory: () => Promise<void>;
   notificationSounds: Record<NotificationSound, string>;
   reminderDefaults: ReminderDefaults;
   addEvent: (event: NewEvent) => Promise<void>;
@@ -64,7 +66,7 @@ type CalendarContextValue = {
   restoreCloudPayload: (payload: string) => Promise<{ events: number; subjects: number }>;
 };
 
-type TransferData = { format: "school-calendar"; version: 1; exportedAt: string; events: CalendarEvent[]; subjectColors: Record<string, string>; reminderDefaults: ReminderDefaults };
+type TransferData = { format: "school-calendar"; version: 1; exportedAt: string; events: CalendarEvent[]; subjectColors: Record<string, string>; subjectReminderPlans?: Record<string, number[]>; reminderDefaults: ReminderDefaults };
 
 const EVENT_TYPES = new Set<EventType>(["lesson", "homework", "exam", "evaluation", "activity"]);
 const HEX_COLOR = /^#[0-9A-Fa-f]{6}$/;
@@ -123,6 +125,7 @@ const SUBJECT_COLORS_KEY = "school-calendar-subject-colors-v1";
 const NOTIFICATION_SOUNDS_KEY = "school-calendar-notification-sounds-v1";
 const REMINDER_DEFAULTS_KEY = "school-calendar-reminder-defaults-v1";
 const SUBJECT_REMINDER_PLANS_KEY = "school-calendar-subject-reminder-plans-v1";
+const NOTIFICATION_HISTORY_KEY = "school-calendar-notification-history-v1";
 const ALARM_KEY = "school-calendar-alarm-v1";
 const ALARM_TIME_KEY = "school-calendar-alarm-time-v1";
 const TIME_FORMAT_KEY = "school-calendar-time-format-v1";
@@ -254,6 +257,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [notificationSounds, setNotificationSounds] = useState<Record<NotificationSound, string>>(DEFAULT_NOTIFICATION_SOUNDS);
   const [reminderDefaults, setReminderDefaults] = useState<ReminderDefaults>(DEFAULT_REMINDER_DEFAULTS);
   const [subjectReminderPlans, setSubjectReminderPlans] = useState<Record<string, number[]>>({});
+  const [notificationHistory, setNotificationHistory] = useState<Array<{ id: string; title: string; body: string; receivedAt: string; eventId?: string }>>([]);
   const [alarmEnabled, setAlarmEnabled] = useState(false);
   const [alarmTime, setAlarmTime] = useState("07:00");
   const [timeFormat, setTimeFormatState] = useState<12 | 24>(24);
@@ -261,13 +265,14 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     void (async () => {
-      const [storedEvents, storedNotifications, storedSubjectColors, storedNotificationSounds, storedReminderDefaults, storedSubjectReminderPlans, storedAlarm, storedAlarmTime, storedTimeFormat] = await Promise.all([
+      const [storedEvents, storedNotifications, storedSubjectColors, storedNotificationSounds, storedReminderDefaults, storedSubjectReminderPlans, storedNotificationHistory, storedAlarm, storedAlarmTime, storedTimeFormat] = await Promise.all([
         AsyncStorage.getItem(STORAGE_KEY),
         AsyncStorage.getItem(NOTIFICATION_KEY),
         AsyncStorage.getItem(SUBJECT_COLORS_KEY),
         AsyncStorage.getItem(NOTIFICATION_SOUNDS_KEY),
         AsyncStorage.getItem(REMINDER_DEFAULTS_KEY),
         AsyncStorage.getItem(SUBJECT_REMINDER_PLANS_KEY),
+        AsyncStorage.getItem(NOTIFICATION_HISTORY_KEY),
         AsyncStorage.getItem(ALARM_KEY),
         AsyncStorage.getItem(ALARM_TIME_KEY),
         AsyncStorage.getItem(TIME_FORMAT_KEY),
@@ -280,11 +285,24 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       try { parsedReminderDefaults = storedReminderDefaults ? JSON.parse(storedReminderDefaults) : null; } catch { parsedReminderDefaults = null; }
       setReminderDefaults(normalizeReminderDefaults(parsedReminderDefaults));
       try { const parsedPlans = storedSubjectReminderPlans ? JSON.parse(storedSubjectReminderPlans) : {}; setSubjectReminderPlans(parsedPlans && typeof parsedPlans === "object" ? parsedPlans : {}); } catch { setSubjectReminderPlans({}); }
+      try { const parsedHistory = storedNotificationHistory ? JSON.parse(storedNotificationHistory) : []; setNotificationHistory(Array.isArray(parsedHistory) ? parsedHistory.slice(0, 100) : []); } catch { setNotificationHistory([]); }
       setAlarmEnabled(storedAlarm === "true"); setAlarmTime(storedAlarmTime ?? "07:00");
       setTimeFormatState(storedTimeFormat === "12" ? 12 : 24);
       setHydrated(true);
     })();
   }, []);
+
+  useEffect(() => {
+    if (Platform.OS === "web") return;
+    const subscription = Notifications.addNotificationReceivedListener((notification) => {
+      const content = notification.request.content;
+      const item = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, title: content.title ?? "تنبيه دراسي", body: content.body ?? "", receivedAt: new Date().toISOString(), eventId: typeof content.data?.eventId === "string" ? content.data.eventId : undefined };
+      setNotificationHistory((current) => { const next = [item, ...current].slice(0, 100); void AsyncStorage.setItem(NOTIFICATION_HISTORY_KEY, JSON.stringify(next)); return next; });
+    });
+    return () => subscription.remove();
+  }, []);
+
+  const clearNotificationHistory = async () => { setNotificationHistory([]); await AsyncStorage.removeItem(NOTIFICATION_HISTORY_KEY); };
 
   const addEvent = async (input: NewEvent) => {
     const instances = input.repeatWeekly ? Array.from({ length: 8 }, (_, index) => ({ ...input, date: toDateKey(addDays(parseDateKey(input.date), index * 7)) })) : [input];
@@ -388,7 +406,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
 
   const buildTransferPayload = () => {
     const portableEvents = events.map(withoutNotificationIds);
-    return { format: "school-calendar" as const, version: 1 as const, exportedAt: new Date().toISOString(), events: portableEvents, subjectColors, reminderDefaults };
+    return { format: "school-calendar" as const, version: 1 as const, exportedAt: new Date().toISOString(), events: portableEvents, subjectColors, subjectReminderPlans, reminderDefaults };
   };
   const getCloudPayload = () => JSON.stringify(buildTransferPayload());
   const restoreCloudPayload = async (raw: string) => {
@@ -396,13 +414,14 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     try { parsed = JSON.parse(raw); } catch { throw new Error("النسخة السحابية غير صالحة"); }
     if (!isValidTransferData(parsed)) throw new Error("تحتوي النسخة السحابية على بيانات غير صالحة");
     const nextColors = parsed.subjectColors;
+    const nextSubjectPlans = parsed.subjectReminderPlans ?? {};
     const nextEvents = await Promise.all(parsed.events.map(async (event) => {
       await cancelReminders(event);
       const cleanEvent = withoutNotificationIds(event);
       return withNotificationIds(cleanEvent, notificationsEnabled ? await scheduleEventReminder(cleanEvent, notificationSounds) : []);
     }));
-    setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(normalizeReminderDefaults(parsed.reminderDefaults));
-    await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
+    setEvents(nextEvents); setSubjectColors(nextColors); setSubjectReminderPlans(nextSubjectPlans); if (parsed.reminderDefaults) setReminderDefaults(normalizeReminderDefaults(parsed.reminderDefaults));
+    await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); await AsyncStorage.setItem(SUBJECT_REMINDER_PLANS_KEY, JSON.stringify(nextSubjectPlans)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
     return { events: nextEvents.length, subjects: Object.keys(nextColors).length };
   };
   const exportData = async () => {
@@ -420,14 +439,15 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       const parsed: unknown = JSON.parse(raw);
       if (!isValidTransferData(parsed)) return { imported: false, message: "يحتوي الملف على موعد أو مادة غير صالحة" };
       const nextColors = parsed.subjectColors;
+      const nextSubjectPlans = parsed.subjectReminderPlans ?? {};
       const nextEvents = await Promise.all(parsed.events.map(async (event) => {
         await cancelReminders(event);
         const cleanEvent = withoutNotificationIds(event);
         return withNotificationIds(cleanEvent, notificationsEnabled ? await scheduleEventReminder(cleanEvent, notificationSounds) : []);
       }));
       if (!(await confirmReplacement())) return { imported: false, message: "تم إلغاء الاستيراد" };
-      setEvents(nextEvents); setSubjectColors(nextColors); if (parsed.reminderDefaults) setReminderDefaults(normalizeReminderDefaults(parsed.reminderDefaults));
-      await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
+      setEvents(nextEvents); setSubjectColors(nextColors); setSubjectReminderPlans(nextSubjectPlans); if (parsed.reminderDefaults) setReminderDefaults(normalizeReminderDefaults(parsed.reminderDefaults));
+      await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); await AsyncStorage.setItem(SUBJECT_REMINDER_PLANS_KEY, JSON.stringify(nextSubjectPlans)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
       return { imported: true, message: `تم استيراد ${nextEvents.length} موعدًا و${Object.keys(nextColors).length} مادة` };
     } catch { return { imported: false, message: "تعذر قراءة ملف الاستيراد" }; }
   };
@@ -458,7 +478,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [hydrated, events, subjectColors, reminderDefaults]);
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderPlan, setSubjectReminderPlan, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationHistory, clearNotificationHistory, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderPlan, setSubjectReminderPlan, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationHistory, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 

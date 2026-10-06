@@ -80,7 +80,7 @@ export default function CalendarScreen() {
 
         <MonthPicker visible={monthPickerVisible} year={monthAnchor.getFullYear()} month={monthAnchor.getMonth()} onSelect={chooseMonth} onClose={() => setMonthPickerVisible(false)} />
       </View>
-      <EventEditor subjectReminderPlans={subjectReminderPlans} preferredTimeFormat={timeFormat} visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={selectedDate} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); const date = parseDateKey(value.date); setSelectedDate(value.date); setMonthAnchor(new Date(date.getFullYear(), date.getMonth(), 1)); setEditorVisible(false); }} />
+      <EventEditor subjectOptions={Object.keys(subjectColors)} subjectReminderPlans={subjectReminderPlans} preferredTimeFormat={timeFormat} visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={selectedDate} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); const date = parseDateKey(value.date); setSelectedDate(value.date); setMonthAnchor(new Date(date.getFullYear(), date.getMonth(), 1)); setEditorVisible(false); }} />
       <EventDetails event={detailsEvent} timeFormat={timeFormat} onClose={() => setDetailsEvent(null)} />
     </ScreenContainer>
   );

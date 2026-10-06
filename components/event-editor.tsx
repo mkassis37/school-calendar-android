@@ -32,6 +32,7 @@ export function EventEditor({
   onSave,
   reminderDefaults,
   subjectReminderPlans,
+  subjectOptions = [],
   preferredTimeFormat = 24,
 }: {
   visible: boolean;
@@ -41,10 +42,12 @@ export function EventEditor({
   onSave: (value: NewEvent) => Promise<void>;
   reminderDefaults?: ReminderDefaults;
   subjectReminderPlans?: Record<string, number[]>;
+  subjectOptions?: string[];
   preferredTimeFormat?: 12 | 24;
 }) {
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
+  const [subjectMenu, setSubjectMenu] = useState(false);
   const [date, setDate] = useState(defaultDate);
   const [time, setTime] = useState("08:00");
   const [type, setType] = useState<EventType>("lesson");
@@ -147,7 +150,7 @@ export function EventEditor({
             <TextInput value={title} onChangeText={setTitle} placeholder="مثال: مراجعة درس الكسور" placeholderTextColor="#AAB5BF" style={styles.input} textAlign="right" autoFocus />
 
             <Text style={styles.label}>المادة أو التصنيف</Text>
-            <TextInput value={subject} onChangeText={setSubject} placeholder="مثال: رياضيات" placeholderTextColor="#AAB5BF" style={styles.input} textAlign="right" />
+            <View style={styles.subjectPickerWrap}><Pressable onPress={() => subjectOptions.length > 0 && setSubjectMenu((value) => !value)} style={styles.subjectPicker}><Text style={styles.subjectPickerText}>{subject || (subjectOptions.length ? "اختر المادة" : "أدخل المادة يدويًا")}</Text><Text style={styles.subjectPickerChevron}>{subjectOptions.length ? (subjectMenu ? "⌃" : "⌄") : ""}</Text></Pressable>{subjectMenu ? <View style={styles.subjectMenu}>{subjectOptions.map((option) => <Pressable key={option} onPress={() => { setSubject(option); setSubjectMenu(false); }} style={styles.subjectOption}><Text style={styles.subjectOptionText}>{option}</Text></Pressable>)}</View> : null}{subjectOptions.length === 0 ? <TextInput value={subject} onChangeText={setSubject} placeholder="مثال: رياضيات" placeholderTextColor="#AAB5BF" style={[styles.input, { marginTop: 7 }]} textAlign="right" /> : null}</View>
 
             <Text style={styles.label}>النوع</Text>
             <View style={styles.typeGrid}>
@@ -176,7 +179,7 @@ export function EventEditor({
             </View>
 
             <Text style={styles.label}>التنبيهات قبل الموعد</Text>
-            <Text style={styles.reminderHint}>يمكنك اختيار أكثر من وقت للتنبيه لنفس الموعد</Text>
+            <Text style={styles.reminderHint}>{event ? "يمكنك تعديل خطة التنبيه لهذا الموعد الآن" : "يمكنك اختيار أكثر من وقت للتنبيه لنفس الموعد"}</Text>
             <View style={styles.reminderRow}>
               {[0, 15, 30, 60, 180, 1440, 10080].map((value) => {
                 const active = value === 0 ? reminderMinutesList.length === 0 : reminderMinutesList.includes(value);
@@ -235,6 +238,13 @@ const styles = StyleSheet.create({
   sheetSubtitle: { color: PALETTE.muted, fontSize: 12, marginTop: 3, textAlign: "right" },
   content: { padding: 20, paddingBottom: 34 },
   label: { color: PALETTE.ink, fontSize: 13, fontWeight: "700", marginTop: 14, marginBottom: 7, textAlign: "right" },
+  subjectPickerWrap: { position: "relative", zIndex: 20 },
+  subjectPicker: { minHeight: 48, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 14, paddingHorizontal: 14, backgroundColor: "#FBFCFE", flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  subjectPickerText: { color: PALETTE.ink, fontSize: 15, fontWeight: "700", textAlign: "right" },
+  subjectPickerChevron: { color: PALETTE.teal, fontSize: 16, fontWeight: "900" },
+  subjectMenu: { position: "absolute", top: 53, left: 0, right: 0, maxHeight: 190, backgroundColor: PALETTE.white, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, elevation: 8, zIndex: 30 },
+  subjectOption: { paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: "#F0F3F5", alignItems: "flex-end" },
+  subjectOptionText: { color: PALETTE.ink, fontSize: 13, fontWeight: "700" },
   input: { minHeight: 48, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 14, paddingHorizontal: 14, color: PALETTE.ink, fontSize: 15, backgroundColor: "#FBFCFE" },
   notes: { minHeight: 82, paddingTop: 12, textAlignVertical: "top" },
   typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" },
