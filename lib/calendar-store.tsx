@@ -41,6 +41,8 @@ type CalendarContextValue = {
   subjectReminderPlans: Record<string, number[]>;
   notificationHistory: Array<{ id: string; title: string; body: string; receivedAt: string; eventId?: string }>;
   clearNotificationHistory: () => Promise<void>;
+  pendingNotificationEventId?: string;
+  clearPendingNotification: () => void;
   notificationSounds: Record<NotificationSound, string>;
   reminderDefaults: ReminderDefaults;
   addEvent: (event: NewEvent) => Promise<void>;
@@ -201,9 +203,10 @@ async function scheduleEventReminder(event: CalendarEvent, notificationSounds = 
       const id = await Notifications.scheduleNotificationAsync({
         content: {
           title: `تذكير: ${event.title}`,
-          body: `${event.subject} · قبل ${minutes >= 1440 ? `${minutes / 1440} يوم` : minutes >= 60 ? `${minutes / 60} ساعة` : `${minutes} دقيقة`}`,
+          body: `لديك ${event.type === "exam" ? "امتحان" : event.type === "homework" ? "واجب" : event.type === "lesson" ? "حصة" : "موعد"} في مادة ${event.subject} بتاريخ ${event.date} الساعة ${event.time}. التذكير قبل ${minutes >= 1440 ? `${minutes / 1440} يوم` : minutes >= 60 ? `${minutes / 60} ساعة` : `${minutes} دقيقة`}`,
           sound: notificationSoundForType(event.type, notificationSounds),
           data: { eventId: event.id, eventType: event.type, reminderMinutes: minutes },
+          categoryIdentifier: "event-reminder",
         },
         trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: triggerDate, channelId: event.type === "exam" ? "school-calendar-exam" : "school-calendar-homework" },
       });
@@ -258,6 +261,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const [reminderDefaults, setReminderDefaults] = useState<ReminderDefaults>(DEFAULT_REMINDER_DEFAULTS);
   const [subjectReminderPlans, setSubjectReminderPlans] = useState<Record<string, number[]>>({});
   const [notificationHistory, setNotificationHistory] = useState<Array<{ id: string; title: string; body: string; receivedAt: string; eventId?: string }>>([]);
+  const [pendingNotificationEventId, setPendingNotificationEventId] = useState<string>();
   const [alarmEnabled, setAlarmEnabled] = useState(false);
   const [alarmTime, setAlarmTime] = useState("07:00");
   const [timeFormat, setTimeFormatState] = useState<12 | 24>(24);
@@ -299,10 +303,22 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       const item = { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, title: content.title ?? "تنبيه دراسي", body: content.body ?? "", receivedAt: new Date().toISOString(), eventId: typeof content.data?.eventId === "string" ? content.data.eventId : undefined };
       setNotificationHistory((current) => { const next = [item, ...current].slice(0, 100); void AsyncStorage.setItem(NOTIFICATION_HISTORY_KEY, JSON.stringify(next)); return next; });
     });
-    return () => subscription.remove();
+    const handleNotificationResponse = (response: Notifications.NotificationResponse) => {
+      const data = response.notification.request.content.data as { eventId?: unknown };
+      const eventId = typeof data.eventId === "string" ? data.eventId : undefined;
+      if (response.actionIdentifier === "SNOOZE_10") {
+        void Notifications.scheduleNotificationAsync({ content: { title: "غفوة التنبيه", body: "سيعود تذكير الموعد بعد ١٠ دقائق", data: { eventId }, categoryIdentifier: "event-reminder" }, trigger: { type: Notifications.SchedulableTriggerInputTypes.TIME_INTERVAL, seconds: 600, repeats: false } });
+      } else if (eventId) {
+        setPendingNotificationEventId(eventId);
+      }
+    };
+    const responseSubscription = Notifications.addNotificationResponseReceivedListener(handleNotificationResponse);
+    void Notifications.getLastNotificationResponseAsync().then((response) => { if (response) handleNotificationResponse(response); });
+    return () => { subscription.remove(); responseSubscription.remove(); };
   }, []);
 
   const clearNotificationHistory = async () => { setNotificationHistory([]); await AsyncStorage.removeItem(NOTIFICATION_HISTORY_KEY); };
+  const clearPendingNotification = () => setPendingNotificationEventId(undefined);
 
   const addEvent = async (input: NewEvent) => {
     const instances = input.repeatWeekly ? Array.from({ length: 8 }, (_, index) => ({ ...input, date: toDateKey(addDays(parseDateKey(input.date), index * 7)) })) : [input];
@@ -346,6 +362,10 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const requestNotifications = async () => {
     if (Platform.OS === "web") return false;
     if (Platform.OS === "android") {
+      await Notifications.setNotificationCategoryAsync("event-reminder", [
+        { identifier: "SNOOZE_10", buttonTitle: "غفوة ١٠ دقائق" },
+        { identifier: "OPEN_EVENT", buttonTitle: "فتح الموعد" },
+      ]);
       await Notifications.setNotificationChannelAsync("school-calendar", {
         name: "تنبيهات الدراسة",
         importance: Notifications.AndroidImportance.HIGH,
@@ -459,7 +479,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       const existing = await AsyncStorage.getItem(ALARM_KEY);
       if (existing) { try { await Notifications.cancelScheduledNotificationAsync(existing); } catch {} }
       let notificationId: string | undefined;
-      if (enabled) notificationId = await Notifications.scheduleNotificationAsync({ content: { title: "منبه الدراسة", body: "حان وقت المنبه الدراسي" }, trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute } });
+      if (enabled) notificationId = await Notifications.scheduleNotificationAsync({ content: { title: "ملخص مواعيد اليوم", body: events.filter((event) => event.date === toDateKey(new Date())).sort((a, b) => a.time.localeCompare(b.time)).map((event) => `${event.time} ${event.title}`).join(" · ") || "لا توجد مواعيد دراسية اليوم", data: { morningSummary: true } }, trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute, channelId: "school-calendar-alarm" } });
       await AsyncStorage.setItem(ALARM_KEY, notificationId ?? "");
     }
     setAlarmEnabled(enabled); setAlarmTime(time); await AsyncStorage.setItem(ALARM_TIME_KEY, time);
@@ -478,7 +498,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [hydrated, events, subjectColors, reminderDefaults]);
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationHistory, clearNotificationHistory, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderPlan, setSubjectReminderPlan, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationHistory, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationHistory, clearNotificationHistory, pendingNotificationEventId, clearPendingNotification, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderPlan, setSubjectReminderPlan, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationHistory, pendingNotificationEventId, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 
