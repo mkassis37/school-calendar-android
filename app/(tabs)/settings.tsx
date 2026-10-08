@@ -1,5 +1,8 @@
 import { useState } from "react";
-import { Alert, Image, Linking, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { Alert, Image, Linking, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import Constants from "expo-constants";
+import * as FileSystem from "expo-file-system/legacy";
+import * as IntentLauncher from "expo-intent-launcher";
 import { ScreenContainer } from "@/components/screen-container";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useCalendar, type EventType } from "@/lib/calendar-store";
@@ -13,6 +16,8 @@ const soundOptions = [{ value: "homework_soft.wav", label: "نغمة هادئة"
 const reminderOptions = [{ value: 0, label: "بدون" }, { value: 15, label: "١٥ د" }, { value: 30, label: "٣٠ د" }, { value: 60, label: "ساعة" }, { value: 1440, label: "يوم" }];
 const planOptions = [{ value: 0, label: "بدون" }, { value: 15, label: "١٥ د" }, { value: 30, label: "٣٠ د" }, { value: 60, label: "ساعة" }, { value: 180, label: "٣ ساعات" }, { value: 1440, label: "يوم" }, { value: 10080, label: "أسبوع" }];
 const arabicDigits = (value: number) => String(value).padStart(2, "0").replace(/\d/g, (digit) => "٠١٢٣٤٥٦٧٨٩"[Number(digit)]);
+const appVersion = Constants.expoConfig?.version ?? "غير معروف";
+const compareVersions = (left: string, right: string) => { const a = left.split(".").map((part) => Number.parseInt(part, 10) || 0); const b = right.split(".").map((part) => Number.parseInt(part, 10) || 0); for (let index = 0; index < 3; index += 1) { if ((a[index] ?? 0) !== (b[index] ?? 0)) return (a[index] ?? 0) - (b[index] ?? 0); } return 0; };
 const alarmParts = (time: string): { hour: number; minute: number; period: "صباحًا" | "مساءً" } => { const [rawHour, minute] = time.split(":").map(Number); const period: "صباحًا" | "مساءً" = rawHour >= 12 ? "مساءً" : "صباحًا"; const hour = rawHour % 12 || 12; return { hour, minute, period }; };
 
 export default function SettingsScreen() {
@@ -38,7 +43,34 @@ export default function SettingsScreen() {
   const openAlarmSoundSettings = () => { void Linking.openSettings(); Alert.alert("اختيار صوت المنبه", "افتح إشعارات التطبيق ثم قناة «منبه الدراسة» واختر أي نغمة من أصوات جهازك. قد تختلف أسماء القوائم حسب إصدار Android."); };
   const uploadCloudBackup = async () => { try { await cloudPush.mutateAsync({ payload: getCloudPayload() }); setSyncMessage("تم حفظ نسخة احتياطية سحابية الآن"); } catch { setSyncMessage("تعذر الحفظ. سجّل الدخول وتأكد من اتصال الإنترنت"); } };
   const restoreCloudBackup = async () => { try { const result = await cloudPull.refetch(); if (!result.data) { setSyncMessage("لا توجد نسخة سحابية لهذا الحساب"); return; } Alert.alert("استبدال البيانات الحالية؟", "سيتم استبدال المواد والمواعيد الحالية بالنسخة السحابية.", [{ text: "إلغاء", style: "cancel" }, { text: "استعادة", style: "destructive", onPress: () => void restoreCloudPayload(result.data!.payload).then((value) => setSyncMessage(`تمت استعادة ${value.events} موعدًا و${value.subjects} مادة`)).catch(() => setSyncMessage("النسخة السحابية غير صالحة")) }]); } catch { setSyncMessage("تعذر الاستعادة. سجّل الدخول وتأكد من اتصال الإنترنت"); } };
-  const checkForUpdate = async () => { setUpdateMessage("جارٍ التحقق..."); try { const response = await fetch("https://schoolcalend-4ahxryef.manus.space/manus-storage/public-updates/latest.json", { headers: { Accept: "application/json" } }); if (!response.ok) throw new Error("update check failed"); const update = await response.json() as { version?: string; downloadUrl?: string }; if (!update.downloadUrl) { setUpdateMessage("لا يوجد تحديث عام منشور حاليًا"); return; } setUpdateMessage(`آخر نسخة منشورة: ${update.version ?? "جديدة"}`); Alert.alert("تحديث متاح", "سيتم فتح رابط تنزيل عام. يبدأ التثبيت بعد موافقتك في Android.", [{ text: "لاحقًا", style: "cancel" }, { text: "تنزيل", onPress: () => void Linking.openURL(update.downloadUrl!) }]); } catch { setUpdateMessage("تعذر التحقق. تأكد من اتصال الإنترنت"); } };
+  const installDownloadedApk = async (uri: string) => {
+    if (Platform.OS !== "android") { await Linking.openURL(uri); return; }
+    const contentUri = await FileSystem.getContentUriAsync(uri);
+    await IntentLauncher.startActivityAsync("android.intent.action.VIEW", { data: contentUri, type: "application/vnd.android.package-archive", flags: 1 | 2 });
+  };
+  const downloadAndInstallUpdate = async (downloadUrl: string, version: string) => {
+    try {
+      setUpdateMessage(`جارٍ تنزيل النسخة ${version}...`);
+      const target = `${FileSystem.cacheDirectory}school-calendar-${version}.apk`;
+      const result = await FileSystem.downloadAsync(downloadUrl, target);
+      setUpdateMessage("اكتمل التنزيل. جارٍ فتح مُثبّت Android...");
+      await installDownloadedApk(result.uri);
+    } catch {
+      setUpdateMessage("تعذر تنزيل النسخة أو فتح المُثبّت. حاول مرة أخرى وتأكد من سماح Android بالتثبيت من هذا المصدر.");
+    }
+  };
+  const checkForUpdate = async () => {
+    setUpdateMessage("جارٍ التحقق...");
+    try {
+      const response = await fetch("https://schoolcalend-4ahxryef.manus.space/manus-storage/public-updates/latest.json", { headers: { Accept: "application/json" } });
+      if (!response.ok) throw new Error("update check failed");
+      const update = await response.json() as { version?: string; downloadUrl?: string };
+      const latestVersion = update.version?.trim();
+      if (!latestVersion || !update.downloadUrl || compareVersions(latestVersion, appVersion) <= 0) { setUpdateMessage(`أنت تستخدم أحدث نسخة (${appVersion})`); return; }
+      setUpdateMessage(`تتوفر النسخة ${latestVersion}`);
+      Alert.alert("تحديث جديد متاح", `النسخة الحالية: ${appVersion}\nالنسخة الجديدة: ${latestVersion}\n\nبعد الموافقة سيتم تنزيل APK تلقائيًا ثم فتح مُثبّت Android.`, [{ text: "لاحقًا", style: "cancel" }, { text: "تنزيل وتثبيت", onPress: () => void downloadAndInstallUpdate(update.downloadUrl!, latestVersion) }]);
+    } catch { setUpdateMessage("تعذر التحقق. تأكد من اتصال الإنترنت"); }
+  };
   return <ScreenContainer className="bg-background" edges={["top", "left", "right"]}>
     <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
       <View style={styles.header}><Text style={styles.title}>الإعدادات</Text><Text style={styles.subtitle}>خلّي الروزنامة على طريقتك</Text></View>
@@ -57,8 +89,8 @@ export default function SettingsScreen() {
       <View style={styles.card}><Text style={styles.transferHint}>انقل المواد والمواعيد إلى هاتف آخر عبر ملف JSON محفوظ ومشاركته من جهازك.</Text><View style={styles.transferRow}><Pressable onPress={() => void exportData()} style={styles.transferButton}><Text style={styles.transferButtonText}>تصدير البيانات</Text></Pressable><Pressable onPress={() => void handleImport()} style={[styles.transferButton, styles.importButton]}><Text style={styles.importButtonText}>استيراد ملف</Text></Pressable></View></View>
       <Text style={styles.section}>النسخ الاحتياطي السحابي</Text><View style={styles.card}><Text style={styles.transferHint}>احفظ نسخة احتياطية بشكل آمن عبر اتصال مشفّر على حسابك، واستعدها على جهاز آخر عند تسجيل الدخول. يبقى التطبيق أوفلاين ويستمر الاستيراد والتصدير المحلي.</Text><View style={styles.transferRow}><Pressable onPress={() => void uploadCloudBackup()} style={styles.transferButton}><Text style={styles.transferButtonText}>{cloudPush.isPending ? "جارٍ الحفظ..." : "حفظ سحابي الآن"}</Text></Pressable><Pressable onPress={() => void restoreCloudBackup()} style={[styles.transferButton, styles.importButton]}><Text style={styles.importButtonText}>{cloudPull.isFetching ? "جارٍ الاستعادة..." : "استعادة سحابية"}</Text></Pressable></View>{syncMessage ? <Text style={styles.syncMessage}>{syncMessage}</Text> : null}</View>
       <Text style={styles.section}>عن التطبيق</Text>
-      <View style={styles.aboutCard}><Image source={require("@/assets/images/school-calendar-hero-small.jpg")} style={{ width: 48, height: 48, borderRadius: 15 }} /><View style={styles.aboutCopy}><Text style={styles.aboutTitle}>روزنامتي الدراسية</Text><Text style={styles.aboutSub}>نسخة تجريبية · مصممة للدراسة بدون تعقيد</Text></View><Text style={styles.version}>١.٠</Text></View>
-      <View style={styles.card}><View style={styles.settingRow}><View style={[styles.settingIcon, { backgroundColor: "#E5F6F2" }]}><IconSymbol name="sync" size={21} color={C.teal} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>تحديث التطبيق</Text><Text style={styles.settingSub}>فحص آخر APK منشور على GitHub وتنزيله يدويًا</Text></View></View><Pressable onPress={() => void checkForUpdate()} style={styles.transferButton}><Text style={styles.transferButtonText}>فحص التحديثات</Text></Pressable>{updateMessage ? <Text style={styles.syncMessage}>{updateMessage}</Text> : null}</View>
+      <View style={styles.aboutCard}><Image source={require("@/assets/images/school-calendar-hero-small.jpg")} style={{ width: 48, height: 48, borderRadius: 15 }} /><View style={styles.aboutCopy}><Text style={styles.aboutTitle}>روزنامتي الدراسية</Text><Text style={styles.aboutSub}>نسخة تجريبية · مصممة للدراسة بدون تعقيد</Text></View><Text style={styles.version}>الإصدار {appVersion}</Text></View>
+      <View style={styles.card}><View style={styles.settingRow}><View style={[styles.settingIcon, { backgroundColor: "#E5F6F2" }]}><IconSymbol name="sync" size={21} color={C.teal} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>تحديث التطبيق</Text><Text style={styles.settingSub}>فحص النسخة الحالية وتنزيل وتثبيت APK تلقائيًا بعد موافقتك</Text></View></View><Pressable onPress={() => void checkForUpdate()} style={styles.transferButton}><Text style={styles.transferButtonText}>فحص التحديثات</Text></Pressable>{updateMessage ? <Text style={styles.syncMessage}>{updateMessage}</Text> : null}</View>
       <View style={styles.offline}><IconSymbol name="cloudOff" size={17} color={C.teal} /><Text style={styles.offlineText}>كل مواعيدك محفوظة على الجهاز ويمكن الوصول إليها بدون إنترنت.</Text></View>
     </ScrollView>
   </ScreenContainer>;
