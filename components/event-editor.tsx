@@ -150,7 +150,7 @@ export function EventEditor({
             <TextInput value={title} onChangeText={setTitle} placeholder="مثال: مراجعة درس الكسور" placeholderTextColor="#AAB5BF" style={styles.input} textAlign="right" autoFocus />
 
             <Text style={styles.label}>المادة أو التصنيف</Text>
-            <View style={styles.subjectPickerWrap}><Pressable onPress={() => subjectOptions.length > 0 && setSubjectMenu((value) => !value)} style={styles.subjectPicker}><Text style={styles.subjectPickerText}>{subject || (subjectOptions.length ? "اختر المادة" : "أدخل المادة يدويًا")}</Text><Text style={styles.subjectPickerChevron}>{subjectOptions.length ? (subjectMenu ? "⌃" : "⌄") : ""}</Text></Pressable>{subjectMenu ? <View style={styles.subjectMenu}>{subjectOptions.map((option) => <Pressable key={option} onPress={() => { setSubject(option); setSubjectMenu(false); }} style={styles.subjectOption}><Text style={styles.subjectOptionText}>{option}</Text></Pressable>)}</View> : null}{subjectOptions.length === 0 ? <TextInput value={subject} onChangeText={setSubject} placeholder="مثال: رياضيات" placeholderTextColor="#AAB5BF" style={[styles.input, { marginTop: 7 }]} textAlign="right" /> : null}</View>
+            <View style={styles.subjectPickerWrap}><Pressable onPress={() => subjectOptions.length > 0 && setSubjectMenu((value) => !value)} style={styles.subjectPicker}><Text style={styles.subjectPickerText}>{subject || (subjectOptions.length ? "اختر المادة" : "أدخل المادة يدويًا")}</Text><Text style={styles.subjectPickerChevron}>{subjectOptions.length ? (subjectMenu ? "⌃" : "⌄") : ""}</Text></Pressable>{subjectMenu ? <View style={styles.subjectMenu}><ScrollView style={styles.subjectMenuScroll} contentContainerStyle={styles.subjectMenuContent} nestedScrollEnabled showsVerticalScrollIndicator keyboardShouldPersistTaps="handled">{subjectOptions.map((option) => { const active = option === subject; return <Pressable key={option} onPress={() => { setSubject(option); setSubjectMenu(false); }} style={[styles.subjectOption, active && styles.subjectOptionActive]}><Text style={[styles.subjectOptionText, active && styles.subjectOptionTextActive]}>{option}</Text>{active ? <IconSymbol name="check" size={16} color={PALETTE.teal} /> : null}</Pressable>; })}</ScrollView></View> : null}{subjectOptions.length === 0 ? <TextInput value={subject} onChangeText={setSubject} placeholder="مثال: رياضيات" placeholderTextColor="#AAB5BF" style={[styles.input, { marginTop: 7 }]} textAlign="right" /> : null}</View>
 
             <Text style={styles.label}>النوع</Text>
             <View style={styles.typeGrid}>
@@ -242,9 +242,13 @@ const styles = StyleSheet.create({
   subjectPicker: { minHeight: 48, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 14, paddingHorizontal: 14, backgroundColor: "#FBFCFE", flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   subjectPickerText: { color: PALETTE.ink, fontSize: 15, fontWeight: "700", textAlign: "right" },
   subjectPickerChevron: { color: PALETTE.teal, fontSize: 16, fontWeight: "900" },
-  subjectMenu: { position: "absolute", top: 53, left: 0, right: 0, maxHeight: 190, backgroundColor: PALETTE.white, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, elevation: 8, zIndex: 30 },
-  subjectOption: { paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: "#F0F3F5", alignItems: "flex-end" },
-  subjectOptionText: { color: PALETTE.ink, fontSize: 13, fontWeight: "700" },
+  subjectMenu: { position: "absolute", top: 53, left: 0, right: 0, maxHeight: 220, backgroundColor: PALETTE.white, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, elevation: 8, zIndex: 30, overflow: "hidden" },
+  subjectMenuScroll: { maxHeight: 218 },
+  subjectMenuContent: { paddingVertical: 2 },
+  subjectOption: { minHeight: 44, paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: "#F0F3F5", flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  subjectOptionActive: { backgroundColor: "#E5F6F2" },
+  subjectOptionText: { color: PALETTE.ink, fontSize: 13, fontWeight: "700", textAlign: "right" },
+  subjectOptionTextActive: { color: PALETTE.teal },
   input: { minHeight: 48, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 14, paddingHorizontal: 14, color: PALETTE.ink, fontSize: 15, backgroundColor: "#FBFCFE" },
   notes: { minHeight: 82, paddingTop: 12, textAlignVertical: "top" },
   typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" },
