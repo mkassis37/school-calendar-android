@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   KeyboardAvoidingView,
   Modal,
@@ -33,6 +33,8 @@ export function EventEditor({
   reminderDefaults,
   subjectReminderPlans,
   subjectOptions = [],
+  subjectUsage = {},
+  onAddSubject,
   preferredTimeFormat = 24,
 }: {
   visible: boolean;
@@ -43,11 +45,15 @@ export function EventEditor({
   reminderDefaults?: ReminderDefaults;
   subjectReminderPlans?: Record<string, number[]>;
   subjectOptions?: string[];
+  subjectUsage?: Record<string, number>;
+  onAddSubject?: (subject: string) => Promise<void>;
   preferredTimeFormat?: 12 | 24;
 }) {
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
   const [subjectMenu, setSubjectMenu] = useState(false);
+  const [subjectSearch, setSubjectSearch] = useState("");
+  const [subjectSort, setSubjectSort] = useState<"usage" | "alphabetical">("usage");
   const [date, setDate] = useState(defaultDate);
   const [time, setTime] = useState("08:00");
   const [type, setType] = useState<EventType>("lesson");
@@ -63,11 +69,21 @@ export function EventEditor({
   const [timeFormat, setTimeFormat] = useState<12 | 24>(24);
   const [period, setPeriod] = useState<"AM" | "PM">("AM");
   const [saving, setSaving] = useState(false);
+  const availableSubjects = useMemo(() => {
+    const query = subjectSearch.trim().toLocaleLowerCase();
+    return [...new Set(subjectOptions)]
+      .filter((option) => !query || option.toLocaleLowerCase().includes(query))
+      .sort((a, b) => subjectSort === "usage"
+        ? (subjectUsage[b] ?? 0) - (subjectUsage[a] ?? 0) || a.localeCompare(b, "ar")
+        : a.localeCompare(b, "ar"));
+  }, [subjectOptions, subjectSearch, subjectSort, subjectUsage]);
 
   useEffect(() => {
     if (!visible) return;
     setTitle(event?.title ?? "");
     setSubject(event?.subject ?? "");
+    setSubjectSearch("");
+    setSubjectMenu(false);
     setDate(event?.date ?? defaultDate);
     setTime(event?.time ?? "08:00");
     setTimeFormat(preferredTimeFormat);
@@ -90,6 +106,14 @@ export function EventEditor({
       setReminderMinutesList(nextPlan);
       setReminderMinutes(String(nextPlan[0] ?? 0));
     }
+  };
+
+  const addSubjectFromPicker = async () => {
+    const nextSubject = subjectSearch.trim().slice(0, 100);
+    if (!nextSubject || !onAddSubject || subjectOptions.some((option) => option === nextSubject)) return;
+    await onAddSubject(nextSubject);
+    setSubject(nextSubject);
+    setSubjectSearch("");
   };
 
   const save = async () => {
@@ -150,7 +174,7 @@ export function EventEditor({
             <TextInput value={title} onChangeText={setTitle} placeholder="مثال: مراجعة درس الكسور" placeholderTextColor="#AAB5BF" style={styles.input} textAlign="right" autoFocus />
 
             <Text style={styles.label}>المادة أو التصنيف</Text>
-            <View style={styles.subjectPickerWrap}><Pressable onPress={() => subjectOptions.length > 0 && setSubjectMenu((value) => !value)} style={styles.subjectPicker}><Text style={styles.subjectPickerText}>{subject || (subjectOptions.length ? "اختر المادة" : "أدخل المادة يدويًا")}</Text><Text style={styles.subjectPickerChevron}>{subjectOptions.length ? (subjectMenu ? "⌃" : "⌄") : ""}</Text></Pressable>{subjectMenu ? <View style={styles.subjectMenu}><ScrollView style={styles.subjectMenuScroll} contentContainerStyle={styles.subjectMenuContent} nestedScrollEnabled showsVerticalScrollIndicator keyboardShouldPersistTaps="handled">{subjectOptions.map((option) => { const active = option === subject; return <Pressable key={option} onPress={() => { setSubject(option); setSubjectMenu(false); }} style={[styles.subjectOption, active && styles.subjectOptionActive]}><Text style={[styles.subjectOptionText, active && styles.subjectOptionTextActive]}>{option}</Text>{active ? <IconSymbol name="check" size={16} color={PALETTE.teal} /> : null}</Pressable>; })}</ScrollView></View> : null}{subjectOptions.length === 0 ? <TextInput value={subject} onChangeText={setSubject} placeholder="مثال: رياضيات" placeholderTextColor="#AAB5BF" style={[styles.input, { marginTop: 7 }]} textAlign="right" /> : null}</View>
+            <View style={styles.subjectPickerWrap}><Pressable onPress={() => subjectOptions.length > 0 && setSubjectMenu((value) => !value)} style={styles.subjectPicker}><Text style={styles.subjectPickerText}>{subject || (subjectOptions.length ? "اختر المادة" : "أدخل المادة يدويًا")}</Text><Text style={styles.subjectPickerChevron}>{subjectOptions.length ? (subjectMenu ? "⌃" : "⌄") : ""}</Text></Pressable>{subjectMenu ? <View style={styles.subjectMenu}><TextInput value={subjectSearch} onChangeText={setSubjectSearch} placeholder="ابحث عن مادة..." placeholderTextColor="#AAB5BF" style={styles.subjectSearchInput} textAlign="right" returnKeyType="search" /><View style={styles.subjectSortRow}><Pressable onPress={() => setSubjectSort("usage")} style={[styles.subjectSortPill, subjectSort === "usage" && styles.subjectSortPillActive]}><Text style={[styles.subjectSortText, subjectSort === "usage" && styles.subjectSortTextActive]}>الأكثر استخدامًا</Text></Pressable><Pressable onPress={() => setSubjectSort("alphabetical")} style={[styles.subjectSortPill, subjectSort === "alphabetical" && styles.subjectSortPillActive]}><Text style={[styles.subjectSortText, subjectSort === "alphabetical" && styles.subjectSortTextActive]}>أبجديًا</Text></Pressable></View><ScrollView style={styles.subjectMenuScroll} contentContainerStyle={styles.subjectMenuContent} nestedScrollEnabled showsVerticalScrollIndicator keyboardShouldPersistTaps="handled">{availableSubjects.map((option) => { const active = option === subject; return <Pressable key={option} onPress={() => { setSubject(option); setSubjectSearch(""); setSubjectMenu(false); }} style={[styles.subjectOption, active && styles.subjectOptionActive]}><Text style={[styles.subjectOptionText, active && styles.subjectOptionTextActive]}>{option}</Text>{active ? <IconSymbol name="check" size={16} color={PALETTE.teal} /> : null}</Pressable>; })}{onAddSubject && subjectSearch.trim() && !subjectOptions.some((option) => option === subjectSearch.trim()) ? <Pressable onPress={() => void addSubjectFromPicker()} style={styles.addSubjectOption}><Text style={styles.addSubjectOptionText}>إضافة «{subjectSearch.trim()}» كمادة جديدة</Text><IconSymbol name="add" size={16} color={PALETTE.teal} /></Pressable> : null}{availableSubjects.length === 0 && !subjectSearch.trim() ? <Text style={styles.subjectEmptyText}>لا توجد مواد بعد</Text> : null}</ScrollView></View> : null}{subjectOptions.length === 0 ? <TextInput value={subject} onChangeText={setSubject} placeholder="مثال: رياضيات" placeholderTextColor="#AAB5BF" style={[styles.input, { marginTop: 7 }]} textAlign="right" /> : null}</View>
 
             <Text style={styles.label}>النوع</Text>
             <View style={styles.typeGrid}>
@@ -242,13 +266,22 @@ const styles = StyleSheet.create({
   subjectPicker: { minHeight: 48, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 14, paddingHorizontal: 14, backgroundColor: "#FBFCFE", flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   subjectPickerText: { color: PALETTE.ink, fontSize: 15, fontWeight: "700", textAlign: "right" },
   subjectPickerChevron: { color: PALETTE.teal, fontSize: 16, fontWeight: "900" },
-  subjectMenu: { position: "absolute", top: 53, left: 0, right: 0, maxHeight: 220, backgroundColor: PALETTE.white, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, elevation: 8, zIndex: 30, overflow: "hidden" },
+  subjectMenu: { position: "absolute", top: 53, left: 0, right: 0, maxHeight: 300, backgroundColor: PALETTE.white, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 12, elevation: 8, zIndex: 30, overflow: "hidden" },
+  subjectSearchInput: { height: 42, margin: 8, paddingHorizontal: 11, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 10, color: PALETTE.ink, fontSize: 13, backgroundColor: "#FBFCFE" },
+  subjectSortRow: { flexDirection: "row-reverse", gap: 6, paddingHorizontal: 8, paddingBottom: 7 },
+  subjectSortPill: { flex: 1, paddingVertical: 7, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 9, alignItems: "center" },
+  subjectSortPillActive: { backgroundColor: "#E5F6F2", borderColor: PALETTE.teal },
+  subjectSortText: { color: PALETTE.muted, fontSize: 10, fontWeight: "800" },
+  subjectSortTextActive: { color: PALETTE.teal },
   subjectMenuScroll: { maxHeight: 218 },
   subjectMenuContent: { paddingVertical: 2 },
   subjectOption: { minHeight: 44, paddingVertical: 11, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: "#F0F3F5", flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
   subjectOptionActive: { backgroundColor: "#E5F6F2" },
   subjectOptionText: { color: PALETTE.ink, fontSize: 13, fontWeight: "700", textAlign: "right" },
   subjectOptionTextActive: { color: PALETTE.teal },
+  addSubjectOption: { minHeight: 44, paddingVertical: 11, paddingHorizontal: 14, flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", backgroundColor: "#F1FAF8" },
+  addSubjectOptionText: { color: PALETTE.teal, fontSize: 12, fontWeight: "800", textAlign: "right" },
+  subjectEmptyText: { color: PALETTE.muted, fontSize: 12, textAlign: "center", paddingVertical: 16 },
   input: { minHeight: 48, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 14, paddingHorizontal: 14, color: PALETTE.ink, fontSize: 15, backgroundColor: "#FBFCFE" },
   notes: { minHeight: 82, paddingTop: 12, textAlignVertical: "top" },
   typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" },

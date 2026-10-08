@@ -7,9 +7,10 @@ import { addDays, arabicNumber, ARABIC_MONTHS, EVENT_META, formatArabicDate, for
 import { formatDisplayTime, normalizeReminderMinutes } from "@/lib/calendar-utils";
 
 const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2", soft: "#EDF8F6", amber: "#D28A24" };
+const SUBJECT_COLORS = ["#2878C8", "#E26B45", "#0F8C7D", "#8559B4", "#C04A75", "#D28A24", "#6B63C5", "#3B9BDB"];
 
 export default function CalendarScreen() {
-  const { events, hydrated, subjectColors, subjectReminderPlans, reminderDefaults, timeFormat, pendingNotificationEventId, clearPendingNotification, addEvent, updateEvent, deleteEvent, toggleEvent } = useCalendar();
+  const { events, hydrated, subjectColors, subjectReminderPlans, reminderDefaults, timeFormat, pendingNotificationEventId, clearPendingNotification, addEvent, updateEvent, deleteEvent, toggleEvent, addSubject } = useCalendar();
   const [selectedDate, setSelectedDate] = useState(toDateKey(new Date()));
   const [monthAnchor, setMonthAnchor] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [editorVisible, setEditorVisible] = useState(false);
@@ -18,6 +19,7 @@ export default function CalendarScreen() {
   const [monthPickerVisible, setMonthPickerVisible] = useState(false);
   const monthDays = useMemo(() => { const firstDay = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), 1); const offset = (firstDay.getDay() + 6) % 7; const total = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + 1, 0).getDate(); return Array.from({ length: Math.ceil((offset + total) / 7) * 7 }, (_, index) => index < offset || index >= offset + total ? null : new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), index - offset + 1)); }, [monthAnchor]);
   const selectedEvents = useMemo(() => events.filter((event) => event.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time)), [events, selectedDate]);
+  const subjectUsage = useMemo(() => events.reduce<Record<string, number>>((counts, event) => { counts[event.subject] = (counts[event.subject] ?? 0) + 1; return counts; }, {}), [events]);
   const selectedDateObj = parseDateKey(selectedDate);
   const todayKey = toDateKey(new Date());
   const completedCount = events.filter((event) => event.done).length;
@@ -83,7 +85,7 @@ export default function CalendarScreen() {
 
         <MonthPicker visible={monthPickerVisible} year={monthAnchor.getFullYear()} month={monthAnchor.getMonth()} onSelect={chooseMonth} onClose={() => setMonthPickerVisible(false)} />
       </View>
-      <EventEditor subjectOptions={Object.keys(subjectColors)} subjectReminderPlans={subjectReminderPlans} preferredTimeFormat={timeFormat} visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={selectedDate} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); const date = parseDateKey(value.date); setSelectedDate(value.date); setMonthAnchor(new Date(date.getFullYear(), date.getMonth(), 1)); setEditorVisible(false); }} />
+      <EventEditor subjectOptions={Object.keys(subjectColors)} subjectUsage={subjectUsage} onAddSubject={async (name) => { await addSubject(name, SUBJECT_COLORS[Object.keys(subjectColors).length % SUBJECT_COLORS.length]); }} subjectReminderPlans={subjectReminderPlans} preferredTimeFormat={timeFormat} visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={selectedDate} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); const date = parseDateKey(value.date); setSelectedDate(value.date); setMonthAnchor(new Date(date.getFullYear(), date.getMonth(), 1)); setEditorVisible(false); }} />
       <EventDetails event={detailsEvent} timeFormat={timeFormat} onClose={() => setDetailsEvent(null)} />
     </ScreenContainer>
   );

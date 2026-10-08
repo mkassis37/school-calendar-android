@@ -8,10 +8,11 @@ import { dailyReminderSummary, homeworkProgress, weeklyStudySummary } from "@/li
 import { formatDisplayTime } from "@/lib/calendar-utils";
 
 const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2" };
+const SUBJECT_COLORS = ["#2878C8", "#E26B45", "#0F8C7D", "#8559B4", "#C04A75", "#D28A24", "#6B63C5", "#3B9BDB"];
 const filters: Array<{ key: "all" | EventType; label: string }> = [{ key: "all", label: "الكل" }, { key: "homework", label: "الواجبات" }, { key: "exam", label: "الامتحانات" }, { key: "evaluation", label: "التقييمات" }, { key: "activity", label: "الأنشطة" }];
 
 export default function TasksScreen() {
-  const { events, addEvent, updateEvent, toggleEvent, reminderDefaults, subjectReminderPlans, subjectColors, timeFormat } = useCalendar();
+  const { events, addEvent, updateEvent, toggleEvent, reminderDefaults, subjectReminderPlans, subjectColors, timeFormat, addSubject } = useCalendar();
   const [filter, setFilter] = useState<"all" | EventType>("all");
   const [showDone, setShowDone] = useState(true);
   const [editorVisible, setEditorVisible] = useState(false);
@@ -25,6 +26,7 @@ export default function TasksScreen() {
   const examCompletion = homeworkProgress(examTotal, examDone);
   const weekly = weeklyStudySummary(events);
   const todayReminders = dailyReminderSummary(events);
+  const subjectUsage = useMemo(() => events.reduce<Record<string, number>>((counts, event) => { counts[event.subject] = (counts[event.subject] ?? 0) + 1; return counts; }, {}), [events]);
   const openNew = () => { setEditingEvent(null); setEditorVisible(true); };
 
   return <ScreenContainer className="bg-background" edges={["top", "left", "right"]}>
@@ -39,7 +41,7 @@ export default function TasksScreen() {
       <Pressable onPress={() => setShowDone((value) => !value)} style={styles.toggleDone}><View style={[styles.checkbox, showDone && styles.checkboxActive]}>{showDone && <IconSymbol name="check" size={13} color={C.white} />}</View><Text style={styles.toggleText}>إظهار المكتمل</Text></Pressable>
       <View style={styles.list}>{taskEvents.length ? taskEvents.map((item) => <TaskRow key={item.id} timeFormat={timeFormat} event={item} onToggle={() => void toggleEvent(item.id)} onEdit={() => { setEditingEvent(item); setEditorVisible(true); }} />) : <View style={styles.empty}><IconSymbol name="checklist" size={30} color={C.teal} /><Text style={styles.emptyTitle}>لا توجد مهام في هذا التصنيف</Text><Text style={styles.emptySub}>أضف واجبًا أو امتحانًا من زر +</Text></View>}</View>
     </ScrollView>
-    <EventEditor subjectOptions={Object.keys(subjectColors)} subjectReminderPlans={subjectReminderPlans} preferredTimeFormat={timeFormat} visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={editingEvent?.date ?? new Date().toISOString().slice(0, 10)} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); setEditorVisible(false); }} />
+    <EventEditor subjectOptions={Object.keys(subjectColors)} subjectUsage={subjectUsage} onAddSubject={async (name) => { await addSubject(name, SUBJECT_COLORS[Object.keys(subjectColors).length % SUBJECT_COLORS.length]); }} subjectReminderPlans={subjectReminderPlans} preferredTimeFormat={timeFormat} visible={editorVisible} event={editingEvent} reminderDefaults={reminderDefaults} defaultDate={editingEvent?.date ?? new Date().toISOString().slice(0, 10)} onClose={() => setEditorVisible(false)} onSave={async (value) => { if (editingEvent) await updateEvent(editingEvent.id, value); else await addEvent(value); setEditorVisible(false); }} />
   </ScreenContainer>;
 }
 
