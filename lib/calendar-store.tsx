@@ -29,6 +29,7 @@ export type CalendarEvent = {
   notificationId?: string;
   notificationIds?: string[];
   repeatWeekly?: boolean;
+  archived?: boolean;
 };
 
 export type NewEvent = Omit<CalendarEvent, "id" | "done" | "notificationId" | "notificationIds"> & { repeatWeekly?: boolean };
@@ -49,6 +50,7 @@ type CalendarContextValue = {
   updateEvent: (id: string, event: NewEvent) => Promise<void>;
   deleteEvent: (id: string) => Promise<void>;
   toggleEvent: (id: string) => Promise<void>;
+  setEventArchived: (id: string, archived: boolean) => Promise<void>;
   requestNotifications: () => Promise<boolean>;
   setSubjectColor: (subject: string, color: string) => Promise<void>;
   setNotificationSound: (kind: NotificationSound, sound: string) => Promise<void>;
@@ -90,6 +92,7 @@ function isValidEvent(value: unknown): value is CalendarEvent {
     (event.notes === undefined || (typeof event.notes === "string" && event.notes.length <= 10000)) &&
     (event.notificationIds === undefined || (Array.isArray(event.notificationIds) && event.notificationIds.length <= 8 && event.notificationIds.every((item) => typeof item === "string" && item.length <= 200))) &&
     (event.repeatWeekly === undefined || typeof event.repeatWeekly === "boolean") &&
+    (event.archived === undefined || typeof event.archived === "boolean") &&
     (event.importance === undefined || event.importance === "normal" || event.importance === "important" || event.importance === "critical");
 }
 
@@ -359,6 +362,15 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     await persist(next);
   };
 
+  const setEventArchived = async (id: string, archived: boolean) => {
+    const current = events.find((event) => event.id === id);
+    if (!current) return;
+    if (archived) await cancelReminders(current);
+    const next = events.map((event) => event.id === id ? withNotificationIds({ ...event, archived }, archived ? [] : event.notificationIds ?? []) : event);
+    setEvents(next);
+    await persist(next);
+  };
+
   const requestNotifications = async () => {
     if (Platform.OS === "web") return false;
     if (Platform.OS === "android") {
@@ -498,7 +510,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     return () => clearTimeout(timer);
   }, [hydrated, events, subjectColors, reminderDefaults]);
 
-  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationHistory, clearNotificationHistory, pendingNotificationEventId, clearPendingNotification, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, requestNotifications, setSubjectColor, setNotificationSound, setReminderPlan, setSubjectReminderPlan, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationHistory, pendingNotificationEventId, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
+  const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationHistory, clearNotificationHistory, pendingNotificationEventId, clearPendingNotification, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, setEventArchived, requestNotifications, setSubjectColor, setNotificationSound, setReminderPlan, setSubjectReminderPlan, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationHistory, pendingNotificationEventId, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;
 }
 

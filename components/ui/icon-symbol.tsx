@@ -32,6 +32,9 @@ const MAPPING = {
   sync: "sync",
   chevronDown: "expand-more",
   info: "info-outline",
+  search: "search",
+  archive: "archive",
+  unarchive: "unarchive",
 } as const;
 
 type MaterialIconName = ComponentProps<typeof MaterialIcons>["name"];
