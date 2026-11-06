@@ -3,11 +3,10 @@ import { Alert, FlatList, Modal, PanResponder, Pressable, StyleSheet, Text, View
 import { ScreenContainer } from "@/components/screen-container";
 import { EventEditor } from "@/components/event-editor";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { addDays, arabicNumber, ARABIC_MONTHS, EVENT_META, formatArabicDate, parseDateKey, toDateKey, useCalendar, type CalendarEvent } from "@/lib/calendar-store";
+import { addDays, arabicNumber, ARABIC_MONTHS, EVENT_META, formatArabicDate, parseDateKey, toDateKey, useCalendar, WEEK_DAYS, type CalendarEvent } from "@/lib/calendar-store";
 import { formatDisplayTime, normalizeReminderMinutes } from "@/lib/calendar-utils";
 
 const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2", soft: "#EDF8F6", amber: "#D28A24" };
-const ENGLISH_SHORT_DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const SUBJECT_COLORS = ["#2878C8", "#E26B45", "#0F8C7D", "#8559B4", "#C04A75", "#D28A24", "#6B63C5", "#3B9BDB"];
 
 export default function CalendarScreen() {
@@ -18,14 +17,16 @@ export default function CalendarScreen() {
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [detailsEvent, setDetailsEvent] = useState<CalendarEvent | null>(null);
   const [monthPickerVisible, setMonthPickerVisible] = useState(false);
+  const [nowMs, setNowMs] = useState(() => Date.now());
   const monthDays = useMemo(() => { const firstDay = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), 1); const offset = (firstDay.getDay() + 6) % 7; const total = new Date(monthAnchor.getFullYear(), monthAnchor.getMonth() + 1, 0).getDate(); return Array.from({ length: Math.ceil((offset + total) / 7) * 7 }, (_, index) => index < offset || index >= offset + total ? null : new Date(monthAnchor.getFullYear(), monthAnchor.getMonth(), index - offset + 1)); }, [monthAnchor]);
   const selectedEvents = useMemo(() => events.filter((event) => event.date === selectedDate).sort((a, b) => a.time.localeCompare(b.time)), [events, selectedDate]);
   const subjectUsage = useMemo(() => events.reduce<Record<string, number>>((counts, event) => { counts[event.subject] = (counts[event.subject] ?? 0) + 1; return counts; }, {}), [events]);
   const selectedDateObj = parseDateKey(selectedDate);
   const todayKey = toDateKey(new Date());
   const completedCount = events.filter((event) => event.done).length;
-  const nextEvent = useMemo(() => { const now = Date.now(); return events.filter((event) => !event.done && new Date(`${event.date}T${event.time}:00`).getTime() > now).sort((a, b) => new Date(`${a.date}T${a.time}:00`).getTime() - new Date(`${b.date}T${b.time}:00`).getTime())[0]; }, [events]);
-  const countdown = nextEvent ? formatCountdown(new Date(`${nextEvent.date}T${nextEvent.time}:00`).getTime() - Date.now()) : null;
+  useEffect(() => { const timer = setInterval(() => setNowMs(Date.now()), 30_000); return () => clearInterval(timer); }, []);
+  const nextEvent = useMemo(() => events.filter((event) => !event.done && !event.archived && new Date(`${event.date}T${event.time}:00`).getTime() > nowMs).sort((a, b) => new Date(`${a.date}T${a.time}:00`).getTime() - new Date(`${b.date}T${b.time}:00`).getTime())[0], [events, nowMs]);
+  const countdown = nextEvent ? formatCountdown(new Date(`${nextEvent.date}T${nextEvent.time}:00`).getTime() - nowMs) : null;
   useEffect(() => { if (!pendingNotificationEventId) return; const event = events.find((item) => item.id === pendingNotificationEventId); if (event) { setSelectedDate(event.date); const date = parseDateKey(event.date); setMonthAnchor(new Date(date.getFullYear(), date.getMonth(), 1)); setDetailsEvent(event); } clearPendingNotification(); }, [pendingNotificationEventId, events, clearPendingNotification]);
 
   const openNew = () => { setEditingEvent(null); setEditorVisible(true); };
@@ -65,7 +66,7 @@ export default function CalendarScreen() {
               <Text style={styles.swipeHint}>اسحب يمينًا أو يسارًا لتغيير الشهر</Text>
             </View>
             <View style={styles.monthCard} {...swipeResponder.panHandlers}>
-              <View style={styles.weekdayRow}>{ENGLISH_SHORT_DAYS.map((day) => <Text key={day} style={styles.weekday}>{day}</Text>)}</View>
+              <View style={styles.weekdayRow}>{WEEK_DAYS.map((day) => <Text key={day} style={styles.weekday}>{day}</Text>)}</View>
               <View style={styles.monthGrid}>{monthDays.map((date, index) => {
                 if (!date) return <View key={`empty-${index}`} style={styles.monthDay} />;
                 const key = toDateKey(date);

@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { EVENT_META, type CalendarEvent, type EventType, type NewEvent, type ReminderDefaults } from "@/lib/calendar-store";
+import { EVENT_META, type CalendarEvent, type EventType, type HomeworkStatus, type NewEvent, type ReminderDefaults } from "@/lib/calendar-store";
 
 const PALETTE = {
   ink: "#142330",
@@ -58,6 +58,7 @@ export function EventEditor({
   const [time, setTime] = useState("08:00");
   const [type, setType] = useState<EventType>("lesson");
   const [importance, setImportance] = useState<"normal" | "important" | "critical">("normal");
+  const [status, setStatus] = useState<HomeworkStatus>("not_started");
   const [reminderMinutes, setReminderMinutes] = useState("15");
   const [reminderMinutesList, setReminderMinutesList] = useState<number[]>([15]);
   const [notes, setNotes] = useState("");
@@ -90,6 +91,7 @@ export function EventEditor({
     const initialHour = Number((event?.time ?? "08:00").split(":")[0]); setPeriod(initialHour >= 12 ? "PM" : "AM");
     setType(event?.type ?? "lesson");
     setImportance(event?.importance ?? "normal");
+    setStatus(event?.status ?? (event?.done ? "completed" : "not_started"));
     const configuredReminders = event?.subject ? (subjectReminderPlans?.[event.subject] ?? reminderDefaults?.[event?.type ?? "lesson"] ?? [15]) : (reminderDefaults?.[event?.type ?? "lesson"] ?? [15]);
     const defaultReminder = event?.reminderMinutes ?? configuredReminders[0] ?? 0;
     const initialReminders = event?.reminderMinutesList ?? (defaultReminder > 0 ? configuredReminders : []);
@@ -126,6 +128,7 @@ export function EventEditor({
       time: time.match(/^\d{2}:\d{2}$/) ? time : "08:00",
       type,
       importance: type === "exam" ? importance : undefined,
+      status: type === "homework" ? status : undefined,
       reminderMinutes: Math.max(0, Number(reminderMinutes) || 0),
       reminderMinutesList,
       notes: notes.trim(),
@@ -191,6 +194,7 @@ export function EventEditor({
             </View>
 
             {type === "exam" ? <><Text style={styles.label}>أهمية الامتحان</Text><View style={styles.typeGrid}>{(["normal", "important", "critical"] as const).map((level) => <Pressable key={level} onPress={() => setImportance(level)} style={[styles.typePill, importance === level && styles.examImportanceActive]}><Text style={[styles.typeText, importance === level && styles.formatTextActive]}>{level === "normal" ? "عادي" : level === "important" ? "مهم" : "حرج"}</Text></Pressable>)}</View></> : null}
+            {type === "homework" ? <><Text style={styles.label}>حالة الواجب</Text><View style={styles.typeGrid}>{([ ["not_started", "لم يبدأ"], ["in_progress", "قيد الإنجاز"], ["completed", "تم الإنجاز"], ["needs_review", "يحتاج مراجعة"] ] as const).map(([value, label]) => <Pressable key={value} onPress={() => setStatus(value)} style={[styles.typePill, status === value && styles.examImportanceActive]}><Text style={[styles.typeText, status === value && styles.formatTextActive]}>{label}</Text></Pressable>)}</View></> : null}
             <View style={styles.row}>
               <View style={styles.half}>
                 <Text style={styles.label}>الوقت</Text>

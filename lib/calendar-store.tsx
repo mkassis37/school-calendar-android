@@ -12,6 +12,7 @@ export type EventType = "lesson" | "homework" | "exam" | "evaluation" | "activit
 export type ExamImportance = "normal" | "important" | "critical";
 export type NotificationSound = "homework" | "exam";
 export type ReminderDefaults = Record<EventType, number[]>;
+export type HomeworkStatus = "not_started" | "in_progress" | "completed" | "needs_review";
 type LegacyReminderDefaults = { homework: number; exam: number };
 
 export type CalendarEvent = {
@@ -23,6 +24,7 @@ export type CalendarEvent = {
   type: EventType;
   importance?: ExamImportance;
   done: boolean;
+  status?: HomeworkStatus;
   reminderMinutes: number;
   reminderMinutesList?: number[];
   notes?: string;
@@ -88,6 +90,7 @@ function isValidEvent(value: unknown): value is CalendarEvent {
     typeof event.time === "string" && TIME_KEY.test(event.time) &&
     typeof event.type === "string" && EVENT_TYPES.has(event.type as EventType) &&
     typeof event.done === "boolean" && typeof reminderMinutes === "number" && Number.isInteger(reminderMinutes) && reminderMinutes >= 0 && reminderMinutes <= 10080 &&
+    (event.status === undefined || event.status === "not_started" || event.status === "in_progress" || event.status === "completed" || event.status === "needs_review") &&
     (event.reminderMinutesList === undefined || (Array.isArray(event.reminderMinutesList) && event.reminderMinutesList.length <= 8 && event.reminderMinutesList.every((item) => typeof item === "number" && Number.isInteger(item) && item >= 0 && item <= 10080))) &&
     (event.notes === undefined || (typeof event.notes === "string" && event.notes.length <= 10000)) &&
     (event.notificationIds === undefined || (Array.isArray(event.notificationIds) && event.notificationIds.length <= 8 && event.notificationIds.every((item) => typeof item === "string" && item.length <= 200))) &&
@@ -132,6 +135,7 @@ const REMINDER_DEFAULTS_KEY = "school-calendar-reminder-defaults-v1";
 const SUBJECT_REMINDER_PLANS_KEY = "school-calendar-subject-reminder-plans-v1";
 const NOTIFICATION_HISTORY_KEY = "school-calendar-notification-history-v1";
 const ALARM_KEY = "school-calendar-alarm-v1";
+const ALARM_IDS_KEY = "school-calendar-alarm-ids-v1";
 const ALARM_TIME_KEY = "school-calendar-alarm-time-v1";
 const TIME_FORMAT_KEY = "school-calendar-time-format-v1";
 const DEFAULT_NOTIFICATION_SOUNDS: Record<NotificationSound, string> = { homework: "homework_soft.wav", exam: "exam_alert.wav" };
@@ -341,7 +345,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     if (!current) return;
     await cancelReminders(current);
     const draft: CalendarEvent = { ...current, ...input };
-    const notificationIds = notificationsEnabled ? await scheduleEventReminder(draft, notificationSounds) : [];
+    const notificationIds = notificationsEnabled && !draft.done && !draft.archived ? await scheduleEventReminder(draft, notificationSounds) : [];
     const updated = withNotificationIds(draft, notificationIds);
     const next = events.map((event) => (event.id === id ? updated : event));
     setEvents(next);
@@ -357,7 +361,15 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   };
 
   const toggleEvent = async (id: string) => {
-    const next = events.map((event) => (event.id === id ? { ...event, done: !event.done } : event));
+    const current = events.find((event) => event.id === id);
+    if (!current) return;
+    const completing = !current.done;
+    if (completing) await cancelReminders(current);
+    const draft: CalendarEvent = { ...current, done: completing, status: completing ? "completed" : current.status === "completed" ? "in_progress" : current.status };
+    const next = events.map((event) => (event.id === id ? withNotificationIds(draft, []) : event));
+    if (!completing && notificationsEnabled && !current.archived) {
+      next.splice(next.findIndex((event) => event.id === id), 1, withNotificationIds(draft, await scheduleEventReminder(draft, notificationSounds)));
+    }
     setEvents(next);
     await persist(next);
   };
@@ -366,7 +378,11 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     const current = events.find((event) => event.id === id);
     if (!current) return;
     if (archived) await cancelReminders(current);
-    const next = events.map((event) => event.id === id ? withNotificationIds({ ...event, archived }, archived ? [] : event.notificationIds ?? []) : event);
+    const draft: CalendarEvent = { ...current, archived };
+    const next = events.map((event) => event.id === id ? withNotificationIds(draft, []) : event);
+    if (!archived && notificationsEnabled && !draft.done) {
+      next.splice(next.findIndex((event) => event.id === id), 1, withNotificationIds(draft, await scheduleEventReminder(draft, notificationSounds)));
+    }
     setEvents(next);
     await persist(next);
   };
@@ -426,6 +442,16 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     const next = { ...subjectReminderPlans, [subject]: clean };
     setSubjectReminderPlans(next);
     await AsyncStorage.setItem(SUBJECT_REMINDER_PLANS_KEY, JSON.stringify(next));
+    if (notificationsEnabled) {
+      const refreshed = await Promise.all(events.map(async (event) => {
+        if (event.subject !== subject || event.done || event.archived) return event;
+        await cancelReminders(event);
+        const draft = { ...event, reminderMinutesList: clean, reminderMinutes: clean[0] ?? 0 };
+        return withNotificationIds(draft, await scheduleEventReminder(draft, notificationSounds));
+      }));
+      setEvents(refreshed);
+      await persist(refreshed);
+    }
   };
   const setReminderPlan = async (kind: EventType, minutes: number[]) => {
     const next = { ...reminderDefaults, [kind]: [...new Set(minutes.filter((value) => Number.isInteger(value) && value >= 0 && value <= 10080))].sort((a, b) => b - a) };
@@ -484,18 +510,43 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     } catch { return { imported: false, message: "تعذر قراءة ملف الاستيراد" }; }
   };
 
-  const setDailyAlarm = async (enabled: boolean, time: string) => {
+  const cancelDailySummaries = async () => {
+    const stored = await AsyncStorage.getItem(ALARM_IDS_KEY);
+    const ids: string[] = stored ? (() => { try { const parsed = JSON.parse(stored); return Array.isArray(parsed) ? parsed.filter((id): id is string => typeof id === "string") : []; } catch { return []; } })() : [];
+    const legacy = await AsyncStorage.getItem(ALARM_KEY);
+    await Promise.all([...ids, ...(legacy ? [legacy] : [])].map(async (id) => { try { await Notifications.cancelScheduledNotificationAsync(id); } catch {} }));
+    await AsyncStorage.removeItem(ALARM_IDS_KEY);
+    await AsyncStorage.removeItem(ALARM_KEY);
+  };
+  const scheduleDailySummaries = async (time: string) => {
     const [hour, minute] = time.split(":").map(Number);
+    if (Platform.OS === "web") return;
+    const ids: string[] = [];
+    for (let offset = 0; offset < 30; offset += 1) {
+      const date = addDays(new Date(), offset);
+      date.setHours(hour, minute, 0, 0);
+      if (date.getTime() <= Date.now()) continue;
+      const dayEvents = events.filter((event) => event.date === toDateKey(date) && !event.archived && !event.done).sort((a, b) => a.time.localeCompare(b.time));
+      const body = dayEvents.map((event) => `${event.time} ${event.title} (${event.subject})`).join(" · ") || "لا توجد مواعيد دراسية اليوم";
+      try {
+        ids.push(await Notifications.scheduleNotificationAsync({ content: { title: "ملخص مواعيد اليوم", body, data: { morningSummary: true, summaryDate: toDateKey(date) } }, trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date, channelId: "school-calendar-alarm" } }));
+      } catch {}
+    }
+    await AsyncStorage.setItem(ALARM_IDS_KEY, JSON.stringify(ids));
+  };
+  const setDailyAlarm = async (enabled: boolean, time: string) => {
     if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(time)) return;
     if (Platform.OS !== "web") {
-      const existing = await AsyncStorage.getItem(ALARM_KEY);
-      if (existing) { try { await Notifications.cancelScheduledNotificationAsync(existing); } catch {} }
-      let notificationId: string | undefined;
-      if (enabled) notificationId = await Notifications.scheduleNotificationAsync({ content: { title: "ملخص مواعيد اليوم", body: events.filter((event) => event.date === toDateKey(new Date())).sort((a, b) => a.time.localeCompare(b.time)).map((event) => `${event.time} ${event.title}`).join(" · ") || "لا توجد مواعيد دراسية اليوم", data: { morningSummary: true } }, trigger: { type: Notifications.SchedulableTriggerInputTypes.DAILY, hour, minute, channelId: "school-calendar-alarm" } });
-      await AsyncStorage.setItem(ALARM_KEY, notificationId ?? "");
+      await cancelDailySummaries();
+      if (enabled) await scheduleDailySummaries(time);
     }
     setAlarmEnabled(enabled); setAlarmTime(time); await AsyncStorage.setItem(ALARM_TIME_KEY, time);
   };
+  useEffect(() => {
+    if (!hydrated || !alarmEnabled || Platform.OS === "web") return;
+    const timer = setTimeout(() => { void cancelDailySummaries().then(() => scheduleDailySummaries(alarmTime)); }, 800);
+    return () => clearTimeout(timer);
+  }, [hydrated, alarmEnabled, alarmTime, events]);
   const previewAlarmSound = async () => {
     if (Platform.OS === "web") return;
     await Notifications.setNotificationChannelAsync("school-calendar-alarm", { name: "منبه الدراسة", importance: Notifications.AndroidImportance.HIGH });
@@ -508,7 +559,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     if (!autoSyncReady.current) { autoSyncReady.current = true; return; }
     const timer = setTimeout(() => { void createTRPCClient().cloudSync.push.mutate({ payload: getCloudPayload() }).catch(() => undefined); }, 1200);
     return () => clearTimeout(timer);
-  }, [hydrated, events, subjectColors, reminderDefaults]);
+  }, [hydrated, events, subjectColors, subjectReminderPlans, reminderDefaults]);
 
   const value = useMemo(() => ({ events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationHistory, clearNotificationHistory, pendingNotificationEventId, clearPendingNotification, notificationSounds, reminderDefaults, addEvent, updateEvent, deleteEvent, toggleEvent, setEventArchived, requestNotifications, setSubjectColor, setNotificationSound, setReminderPlan, setSubjectReminderPlan, addSubject, removeSubject, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat, getCloudPayload, restoreCloudPayload }), [events, hydrated, notificationsEnabled, subjectColors, subjectReminderPlans, notificationHistory, pendingNotificationEventId, notificationSounds, reminderDefaults, alarmEnabled, alarmTime, timeFormat]);
   return <CalendarContext.Provider value={value}>{children}</CalendarContext.Provider>;

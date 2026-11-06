@@ -44,9 +44,9 @@ export function formatDisplayTime(time: string, format: 12 | 24) {
 }
 
 
-export function dailyReminderSummary(events: Array<{ id: string; date: string; time: string; title: string; type: EventType; reminderMinutes: number; reminderMinutesList?: number[] }>, referenceDate = new Date()) {
+export function dailyReminderSummary(events: Array<{ id: string; date: string; time: string; title: string; type: EventType; reminderMinutes: number; reminderMinutesList?: number[]; done?: boolean; archived?: boolean }>, referenceDate = new Date()) {
   const key = toDateKey(referenceDate);
-  const reminders = events.flatMap((event) => (event.date === key ? normalizeReminderMinutes(event).map((minutes) => ({ event, minutes })) : []));
+  const reminders = events.flatMap((event) => (event.date === key && !event.done && !event.archived ? normalizeReminderMinutes(event).map((minutes) => ({ event, minutes })) : []));
   return reminders.sort((a, b) => `${a.event.time}`.localeCompare(`${b.event.time}`) || b.minutes - a.minutes);
 }
 
