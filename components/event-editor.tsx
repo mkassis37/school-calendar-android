@@ -10,8 +10,10 @@ import {
   TextInput,
   View,
 } from "react-native";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system/legacy";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { EVENT_META, type CalendarEvent, type EventType, type HomeworkStatus, type NewEvent, type ReminderDefaults } from "@/lib/calendar-store";
+import { EVENT_META, type CalendarEvent, type EventAttachment, type EventType, type ExamPlan, type HomeworkStatus, type NewEvent, type ReminderDefaults } from "@/lib/calendar-store";
 
 const PALETTE = {
   ink: "#142330",
@@ -62,6 +64,13 @@ export function EventEditor({
   const [reminderMinutes, setReminderMinutes] = useState("15");
   const [reminderMinutesList, setReminderMinutesList] = useState<number[]>([15]);
   const [notes, setNotes] = useState("");
+  const [attachments, setAttachments] = useState<EventAttachment[]>([]);
+  const [examLessons, setExamLessons] = useState("");
+  const [examPages, setExamPages] = useState("");
+  const [reviewedLessons, setReviewedLessons] = useState("");
+  const [reviewedPages, setReviewedPages] = useState("");
+  const [gradeScore, setGradeScore] = useState("");
+  const [gradeMax, setGradeMax] = useState("100");
   const [repeatWeekly, setRepeatWeekly] = useState(false);
   const [dateMenu, setDateMenu] = useState<"day" | "month" | "year" | null>(null);
   const [timeMenu, setTimeMenu] = useState<"hour" | "minute" | null>(null);
@@ -98,6 +107,13 @@ export function EventEditor({
     setReminderMinutesList(initialReminders);
     setReminderMinutes(String(initialReminders[0] ?? 0));
     setNotes(event?.notes ?? "");
+    setAttachments(event?.attachments ?? []);
+    setExamLessons(event?.examPlan?.lessons.join(", ") ?? "");
+    setExamPages(event?.examPlan?.pages.join(", ") ?? "");
+    setReviewedLessons(event?.examPlan?.reviewedLessons.join(", ") ?? "");
+    setReviewedPages(event?.examPlan?.reviewedPages.join(", ") ?? "");
+    setGradeScore(event?.grade ? String(event.grade.score) : "");
+    setGradeMax(event?.grade ? String(event.grade.max) : "100");
     setRepeatWeekly(event?.repeatWeekly ?? false);
   }, [visible, event, defaultDate, reminderDefaults, subjectReminderPlans, preferredTimeFormat]);
 
@@ -121,6 +137,11 @@ export function EventEditor({
   const save = async () => {
     if (!title.trim() || !date.match(/^\d{4}-\d{2}-\d{2}$/)) return;
     setSaving(true);
+    const splitItems = (value: string) => value.split(",").map((item) => item.trim()).filter(Boolean).slice(0, 100);
+    const examPlan: ExamPlan | undefined = type === "exam" ? { lessons: splitItems(examLessons), pages: splitItems(examPages), reviewedLessons: splitItems(reviewedLessons), reviewedPages: splitItems(reviewedPages) } : undefined;
+    const parsedScore = Number(gradeScore);
+    const parsedMax = Number(gradeMax);
+    const grade = type === "exam" && Number.isFinite(parsedScore) && Number.isFinite(parsedMax) && parsedScore >= 0 && parsedMax > 0 && parsedScore <= parsedMax ? { score: parsedScore, max: parsedMax } : undefined;
     await onSave({
       title: title.trim(),
       subject: subject.trim() || "عام",
@@ -132,11 +153,27 @@ export function EventEditor({
       reminderMinutes: Math.max(0, Number(reminderMinutes) || 0),
       reminderMinutesList,
       notes: notes.trim(),
+      attachments,
+      examPlan,
+      grade,
       repeatWeekly,
     });
     setSaving(false);
   };
 
+  const addAttachments = async () => {
+    const result = await DocumentPicker.getDocumentAsync({ type: ["image/*", "application/pdf"], multiple: true, copyToCacheDirectory: true });
+    if (result.canceled) return;
+    const directory = `${FileSystem.documentDirectory ?? FileSystem.cacheDirectory}school-calendar-attachments/`;
+    await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
+    const selected = await Promise.all(result.assets.slice(0, 12 - attachments.length).map(async (asset) => {
+      const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const target = `${directory}${id}-${asset.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+      try { await FileSystem.copyAsync({ from: asset.uri, to: target }); } catch {}
+      return { id, name: asset.name, uri: target, mimeType: asset.mimeType ?? "application/octet-stream", size: asset.size };
+    }));
+    setAttachments((current) => [...current, ...selected]);
+  };
   const [dateYear, dateMonth, dateDay] = date.split("-").map(Number);
   const daysInMonth = new Date(dateYear || 2026, (dateMonth || 1), 0).getDate();
   const years = Array.from({ length: 11 }, (_, index) => (new Date().getFullYear() - 5 + index));
@@ -227,6 +264,8 @@ export function EventEditor({
 
             <Text style={styles.label}>ملاحظات (اختياري)</Text>
             <TextInput value={notes} onChangeText={setNotes} placeholder="أضف أي تفاصيل تساعدك" placeholderTextColor="#AAB5BF" style={[styles.input, styles.notes]} textAlign="right" multiline />
+            {type === "exam" ? <View style={styles.planBox}><Text style={styles.planTitle}>خطة الاستعداد للامتحان</Text><Text style={styles.planHint}>اكتب العناصر مفصولة بفواصل، ثم حدد ما تمت مراجعته.</Text><TextInput value={examLessons} onChangeText={setExamLessons} placeholder="الدروس: الكسور، المعادلات" placeholderTextColor="#AAB5BF" style={styles.input} textAlign="right" /><TextInput value={examPages} onChangeText={setExamPages} placeholder="الصفحات: 12-18، 24" placeholderTextColor="#AAB5BF" style={styles.input} textAlign="right" /><TextInput value={reviewedLessons} onChangeText={setReviewedLessons} placeholder="الدروس المراجعة" placeholderTextColor="#AAB5BF" style={styles.input} textAlign="right" /><TextInput value={reviewedPages} onChangeText={setReviewedPages} placeholder="الصفحات المراجعة" placeholderTextColor="#AAB5BF" style={styles.input} textAlign="right" /><View style={styles.gradeRow}><TextInput value={gradeMax} onChangeText={setGradeMax} placeholder="من" keyboardType="numeric" placeholderTextColor="#AAB5BF" style={styles.gradeInput} textAlign="center" /><Text style={styles.gradeSlash}>/</Text><TextInput value={gradeScore} onChangeText={setGradeScore} placeholder="العلامة" keyboardType="numeric" placeholderTextColor="#AAB5BF" style={styles.gradeInput} textAlign="center" /></View><Text style={styles.planHint}>العلامة اختيارية وتظهر في التقرير الأسبوعي.</Text></View> : null}
+            {(type === "homework" || type === "exam") ? <View style={styles.attachmentBox}><View style={styles.attachmentHeader}><Text style={styles.planTitle}>المرفقات</Text><Pressable onPress={() => void addAttachments()} style={styles.attachButton}><IconSymbol name="add" size={15} color={PALETTE.teal} /><Text style={styles.attachText}>إضافة صورة أو PDF</Text></Pressable></View>{attachments.map((attachment) => <View key={attachment.id} style={styles.attachmentRow}><Text style={styles.attachmentName} numberOfLines={1}>{attachment.name}</Text><Pressable onPress={() => setAttachments((current) => current.filter((item) => item.id !== attachment.id))}><Text style={styles.removeAttachment}>حذف</Text></Pressable></View>)}</View> : null}
 
             <Pressable onPress={save} disabled={saving || !title.trim()} style={({ pressed }) => [styles.saveButton, (!title.trim() || saving) && styles.disabled, pressed && styles.pressed]}>
               <IconSymbol name="check" size={20} color={PALETTE.white} />
@@ -288,6 +327,19 @@ const styles = StyleSheet.create({
   subjectEmptyText: { color: PALETTE.muted, fontSize: 12, textAlign: "center", paddingVertical: 16 },
   input: { minHeight: 48, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 14, paddingHorizontal: 14, color: PALETTE.ink, fontSize: 15, backgroundColor: "#FBFCFE" },
   notes: { minHeight: 82, paddingTop: 12, textAlignVertical: "top" },
+  planBox: { marginTop: 12, padding: 12, borderRadius: 14, backgroundColor: "#FFF8E8", borderWidth: 1, borderColor: "#F2D99A", gap: 7 },
+  planTitle: { color: PALETTE.ink, fontSize: 13, fontWeight: "900", textAlign: "right" },
+  planHint: { color: PALETTE.muted, fontSize: 10, lineHeight: 17, textAlign: "right" },
+  gradeRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "center", gap: 8, marginTop: 4 },
+  gradeInput: { width: 82, minHeight: 42, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 11, color: PALETTE.ink, backgroundColor: PALETTE.white, fontSize: 15, fontWeight: "800" },
+  gradeSlash: { color: PALETTE.muted, fontSize: 18, fontWeight: "800" },
+  attachmentBox: { marginTop: 12, padding: 12, borderRadius: 14, backgroundColor: "#E5F6F2", gap: 8 },
+  attachmentHeader: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between" },
+  attachButton: { flexDirection: "row-reverse", alignItems: "center", gap: 4, paddingHorizontal: 8, paddingVertical: 6, borderRadius: 9, backgroundColor: PALETTE.white },
+  attachText: { color: PALETTE.teal, fontSize: 10, fontWeight: "800" },
+  attachmentRow: { flexDirection: "row-reverse", alignItems: "center", justifyContent: "space-between", paddingTop: 7, borderTopWidth: 1, borderTopColor: "#CDEBE5" },
+  attachmentName: { flex: 1, color: PALETTE.ink, fontSize: 10, textAlign: "right", marginLeft: 8 },
+  removeAttachment: { color: "#C04A75", fontSize: 10, fontWeight: "800" },
   typeGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, justifyContent: "flex-end" },
   examImportanceActive: { backgroundColor: "#FCECF2", borderColor: "#C04A75" },
   typePill: { flexDirection: "row-reverse", alignItems: "center", gap: 6, borderWidth: 1, borderColor: PALETTE.border, borderRadius: 13, paddingHorizontal: 11, paddingVertical: 9 },

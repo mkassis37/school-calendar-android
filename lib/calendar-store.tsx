@@ -13,6 +13,8 @@ export type ExamImportance = "normal" | "important" | "critical";
 export type NotificationSound = "homework" | "exam";
 export type ReminderDefaults = Record<EventType, number[]>;
 export type HomeworkStatus = "not_started" | "in_progress" | "completed" | "needs_review";
+export type EventAttachment = { id: string; name: string; uri: string; mimeType: string; size?: number };
+export type ExamPlan = { lessons: string[]; pages: string[]; reviewedLessons: string[]; reviewedPages: string[] };
 type LegacyReminderDefaults = { homework: number; exam: number };
 
 export type CalendarEvent = {
@@ -25,6 +27,9 @@ export type CalendarEvent = {
   importance?: ExamImportance;
   done: boolean;
   status?: HomeworkStatus;
+  attachments?: EventAttachment[];
+  examPlan?: ExamPlan;
+  grade?: { score: number; max: number };
   reminderMinutes: number;
   reminderMinutesList?: number[];
   notes?: string;
@@ -91,6 +96,9 @@ function isValidEvent(value: unknown): value is CalendarEvent {
     typeof event.type === "string" && EVENT_TYPES.has(event.type as EventType) &&
     typeof event.done === "boolean" && typeof reminderMinutes === "number" && Number.isInteger(reminderMinutes) && reminderMinutes >= 0 && reminderMinutes <= 10080 &&
     (event.status === undefined || event.status === "not_started" || event.status === "in_progress" || event.status === "completed" || event.status === "needs_review") &&
+    (event.attachments === undefined || (Array.isArray(event.attachments) && event.attachments.length <= 12 && event.attachments.every((item) => !!item && typeof item === "object" && typeof item.id === "string" && item.id.length <= 120 && typeof item.name === "string" && item.name.length <= 240 && typeof item.uri === "string" && item.uri.length <= 2000 && typeof item.mimeType === "string" && item.mimeType.length <= 100 && (item.size === undefined || (typeof item.size === "number" && item.size >= 0 && item.size <= 50_000_000))))) &&
+    (event.examPlan === undefined || (!!event.examPlan && Array.isArray(event.examPlan.lessons) && Array.isArray(event.examPlan.pages) && Array.isArray(event.examPlan.reviewedLessons) && Array.isArray(event.examPlan.reviewedPages) && [event.examPlan.lessons, event.examPlan.pages, event.examPlan.reviewedLessons, event.examPlan.reviewedPages].every((items) => items.length <= 100 && items.every((item) => typeof item === "string" && item.length <= 300)))) &&
+    (event.grade === undefined || (!!event.grade && Number.isFinite(event.grade.score) && Number.isFinite(event.grade.max) && event.grade.score >= 0 && event.grade.max > 0 && event.grade.score <= event.grade.max)) &&
     (event.reminderMinutesList === undefined || (Array.isArray(event.reminderMinutesList) && event.reminderMinutesList.length <= 8 && event.reminderMinutesList.every((item) => typeof item === "number" && Number.isInteger(item) && item >= 0 && item <= 10080))) &&
     (event.notes === undefined || (typeof event.notes === "string" && event.notes.length <= 10000)) &&
     (event.notificationIds === undefined || (Array.isArray(event.notificationIds) && event.notificationIds.length <= 8 && event.notificationIds.every((item) => typeof item === "string" && item.length <= 200))) &&

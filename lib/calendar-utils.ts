@@ -26,6 +26,11 @@ export function homeworkProgress(total: number, completed: number) {
   return Math.round((Math.max(0, Math.min(completed, total)) / total) * 100);
 }
 
+export function examPlanProgress(plan?: { lessons: string[]; pages: string[]; reviewedLessons: string[]; reviewedPages: string[] }) {
+  if (!plan) return 0;
+  return homeworkProgress(plan.lessons.length + plan.pages.length, plan.reviewedLessons.length + plan.reviewedPages.length);
+}
+
 export function notificationSoundForType(type: EventType, sounds: { homework: string; exam: string }) {
   return type === "exam" ? sounds.exam : sounds.homework;
 }
