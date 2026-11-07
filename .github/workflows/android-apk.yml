@@ -27,6 +27,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Read app version
+        id: app-version
+        shell: bash
+        run: |
+          VERSION=$(node -e "const fs=require('fs'); const text=fs.readFileSync('app.config.ts','utf8'); const match=text.match(/version:\s*[\\\"']([^\\\"']+)[\\\"']/); if (!match) process.exit(1); process.stdout.write(match[1]);")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Building app version $VERSION"
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -49,18 +58,18 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: school-calendar-apk-${{ github.sha }}
+          name: school-calendar-apk-v${{ steps.app-version.outputs.version }}
           path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 30
 
-      - name: Publish rolling APK release
+      - name: Publish numbered APK release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: latest-apk
-          name: Latest Android APK
+          tag_name: ${{ steps.app-version.outputs.tag }}
+          name: Android APK v${{ steps.app-version.outputs.version }}
           prerelease: true
           make_latest: false
           files: android/app/build/outputs/apk/release/app-release.apk
           body: |
-            أحدث APK مستقل مبني تلقائيًا من الفرع main.
+            APK مستقل للإصدار v${{ steps.app-version.outputs.version }} مبني تلقائيًا من الفرع main.
             Commit: ${{ github.sha }}
