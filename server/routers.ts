@@ -15,7 +15,16 @@ const cloudEventSchema = z.object({
 const cloudPayloadSchema = z.object({
   format: z.literal("school-calendar"), version: z.literal(1), exportedAt: z.string().max(100),
   events: z.array(cloudEventSchema).max(5000), subjectColors: z.record(z.string().min(1).max(100), z.string().regex(/^#[0-9A-Fa-f]{6}$/)).refine((value) => Object.keys(value).length <= 200),
-  reminderDefaults: z.object({ homework: z.number().int().min(0).max(10080), exam: z.number().int().min(0).max(10080) }),
+  reminderDefaults: z.union([
+    z.object({ homework: z.number().int().min(0).max(10080), exam: z.number().int().min(0).max(10080) }),
+    z.object({
+      lesson: z.array(z.number().int().min(0).max(10080)).max(8),
+      homework: z.array(z.number().int().min(0).max(10080)).max(8),
+      exam: z.array(z.number().int().min(0).max(10080)).max(8),
+      evaluation: z.array(z.number().int().min(0).max(10080)).max(8),
+      activity: z.array(z.number().int().min(0).max(10080)).max(8),
+    }),
+  ]),
 });
 
 export const appRouter = router({

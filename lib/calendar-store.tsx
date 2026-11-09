@@ -13,7 +13,7 @@ export type ExamImportance = "normal" | "important" | "critical";
 export type NotificationSound = "homework" | "exam";
 export type ReminderDefaults = Record<EventType, number[]>;
 export type HomeworkStatus = "not_started" | "in_progress" | "completed" | "needs_review";
-export type EventAttachment = { id: string; name: string; uri: string; mimeType: string; size?: number };
+export type EventAttachment = { id: string; name: string; uri: string; mimeType: string; size?: number; backupData?: string };
 export type ExamPlan = { lessons: string[]; pages: string[]; reviewedLessons: string[]; reviewedPages: string[] };
 type LegacyReminderDefaults = { homework: number; exam: number };
 
@@ -73,7 +73,7 @@ type CalendarContextValue = {
   previewAlarmSound: () => Promise<void>;
   timeFormat: 12 | 24;
   setTimeFormat: (format: 12 | 24) => Promise<void>;
-  getCloudPayload: () => string;
+  getCloudPayload: () => Promise<string>;
   restoreCloudPayload: (payload: string) => Promise<{ events: number; subjects: number }>;
 };
 
@@ -96,7 +96,7 @@ function isValidEvent(value: unknown): value is CalendarEvent {
     typeof event.type === "string" && EVENT_TYPES.has(event.type as EventType) &&
     typeof event.done === "boolean" && typeof reminderMinutes === "number" && Number.isInteger(reminderMinutes) && reminderMinutes >= 0 && reminderMinutes <= 10080 &&
     (event.status === undefined || event.status === "not_started" || event.status === "in_progress" || event.status === "completed" || event.status === "needs_review") &&
-    (event.attachments === undefined || (Array.isArray(event.attachments) && event.attachments.length <= 12 && event.attachments.every((item) => !!item && typeof item === "object" && typeof item.id === "string" && item.id.length <= 120 && typeof item.name === "string" && item.name.length <= 240 && typeof item.uri === "string" && item.uri.length <= 2000 && typeof item.mimeType === "string" && item.mimeType.length <= 100 && (item.size === undefined || (typeof item.size === "number" && item.size >= 0 && item.size <= 50_000_000))))) &&
+    (event.attachments === undefined || (Array.isArray(event.attachments) && event.attachments.length <= 12 && event.attachments.every((item) => !!item && typeof item === "object" && typeof item.id === "string" && item.id.length <= 120 && typeof item.name === "string" && item.name.length <= 240 && typeof item.uri === "string" && item.uri.length <= 2000 && typeof item.mimeType === "string" && item.mimeType.length <= 100 && (item.backupData === undefined || (typeof item.backupData === "string" && item.backupData.length <= 3_000_000)) && (item.size === undefined || (typeof item.size === "number" && item.size >= 0 && item.size <= 50_000_000))))) &&
     (event.examPlan === undefined || (!!event.examPlan && Array.isArray(event.examPlan.lessons) && Array.isArray(event.examPlan.pages) && Array.isArray(event.examPlan.reviewedLessons) && Array.isArray(event.examPlan.reviewedPages) && [event.examPlan.lessons, event.examPlan.pages, event.examPlan.reviewedLessons, event.examPlan.reviewedPages].every((items) => items.length <= 100 && items.every((item) => typeof item === "string" && item.length <= 300)))) &&
     (event.grade === undefined || (!!event.grade && Number.isFinite(event.grade.score) && Number.isFinite(event.grade.max) && event.grade.score >= 0 && event.grade.max > 0 && event.grade.score <= event.grade.max)) &&
     (event.reminderMinutesList === undefined || (Array.isArray(event.reminderMinutesList) && event.reminderMinutesList.length <= 8 && event.reminderMinutesList.every((item) => typeof item === "number" && Number.isInteger(item) && item >= 0 && item <= 10080))) &&
@@ -249,9 +249,50 @@ function withNotificationIds(event: CalendarEvent, ids: string[]): CalendarEvent
   return { ...event, notificationId: ids[0], notificationIds: ids.length > 0 ? ids : undefined };
 }
 
+const MAX_EMBEDDED_ATTACHMENT_BYTES = 3_000_000;
+
 function withoutNotificationIds(event: CalendarEvent): CalendarEvent {
   const { notificationId: _notificationId, notificationIds: _notificationIds, ...portable } = event;
   return portable;
+}
+
+async function buildPortableEvent(event: CalendarEvent, remainingBytes: { value: number }): Promise<CalendarEvent> {
+  const portable = withoutNotificationIds(event);
+  if (!portable.attachments?.length || Platform.OS === "web") return portable;
+  const attachments = await Promise.all(portable.attachments.map(async (attachment) => {
+    if (remainingBytes.value <= 0 || attachment.backupData || !attachment.uri.startsWith("file:")) return attachment;
+    try {
+      const info = await FileSystem.getInfoAsync(attachment.uri);
+      const size = info.exists && "size" in info && typeof info.size === "number" ? info.size : attachment.size ?? 0;
+      if (size <= 0 || size > remainingBytes.value) return attachment;
+      const backupData = await FileSystem.readAsStringAsync(attachment.uri, { encoding: FileSystem.EncodingType.Base64 });
+      if (backupData.length > remainingBytes.value) return attachment;
+      remainingBytes.value -= backupData.length;
+      return { ...attachment, backupData };
+    } catch {
+      return attachment;
+    }
+  }));
+  return { ...portable, attachments };
+}
+
+async function restorePortableEvent(event: CalendarEvent): Promise<CalendarEvent> {
+  if (!event.attachments?.length || Platform.OS === "web") return event;
+  const directory = `${FileSystem.documentDirectory ?? FileSystem.cacheDirectory}school-calendar-attachments/`;
+  await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
+  const attachments = await Promise.all(event.attachments.map(async (attachment) => {
+    if (!attachment.backupData) return attachment;
+    const safeName = attachment.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+    const target = `${directory}${attachment.id}-${safeName}`;
+    try {
+      await FileSystem.writeAsStringAsync(target, attachment.backupData, { encoding: FileSystem.EncodingType.Base64 });
+      const { backupData: _backupData, ...rest } = attachment;
+      return { ...rest, uri: target };
+    } catch {
+      return attachment;
+    }
+  }));
+  return { ...event, attachments };
 }
 
 function reminderDefaultsForType(type: EventType, defaults: ReminderDefaults): number[] {
@@ -336,7 +377,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const clearPendingNotification = () => setPendingNotificationEventId(undefined);
 
   const addEvent = async (input: NewEvent) => {
-    const instances = input.repeatWeekly ? Array.from({ length: 8 }, (_, index) => ({ ...input, date: toDateKey(addDays(parseDateKey(input.date), index * 7)) })) : [input];
+    const instances = input.repeatWeekly ? Array.from({ length: 52 }, (_, index) => ({ ...input, date: toDateKey(addDays(parseDateKey(input.date), index * 7)) })) : [input];
     const created: CalendarEvent[] = [];
     for (const instance of instances) {
       const event: CalendarEvent = { ...instance, reminderMinutesList: instance.reminderMinutesList?.length ? instance.reminderMinutesList : reminderPlanForEvent(instance, reminderDefaults, subjectReminderPlans), id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, done: false };
@@ -420,6 +461,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
     if (enabled) {
       const refreshed = await Promise.all(events.map(async (event) => {
         await cancelReminders(event);
+        if (event.done || event.archived) return withNotificationIds(event, []);
         return withNotificationIds(event, await scheduleEventReminder(event, notificationSounds));
       }));
       setEvents(refreshed);
@@ -470,28 +512,30 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   const addSubject = async (subject: string, color: string) => { const next = { ...subjectColors, [subject]: color }; setSubjectColors(next); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(next)); };
   const removeSubject = async (subject: string) => { if (Object.keys(DEFAULT_SUBJECT_COLORS).includes(subject)) return; const next = { ...subjectColors }; delete next[subject]; setSubjectColors(next); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(next)); };
 
-  const buildTransferPayload = () => {
-    const portableEvents = events.map(withoutNotificationIds);
+  const buildTransferPayload = async () => {
+    const remainingBytes = { value: MAX_EMBEDDED_ATTACHMENT_BYTES };
+    const portableEvents = await Promise.all(events.map((event) => buildPortableEvent(event, remainingBytes)));
     return { format: "school-calendar" as const, version: 1 as const, exportedAt: new Date().toISOString(), events: portableEvents, subjectColors, subjectReminderPlans, reminderDefaults };
   };
-  const getCloudPayload = () => JSON.stringify(buildTransferPayload());
+  const getCloudPayload = async () => JSON.stringify(await buildTransferPayload());
   const restoreCloudPayload = async (raw: string) => {
     let parsed: unknown;
     try { parsed = JSON.parse(raw); } catch { throw new Error("النسخة السحابية غير صالحة"); }
     if (!isValidTransferData(parsed)) throw new Error("تحتوي النسخة السحابية على بيانات غير صالحة");
     const nextColors = parsed.subjectColors;
     const nextSubjectPlans = parsed.subjectReminderPlans ?? {};
+    if (Platform.OS !== "web") await Notifications.cancelAllScheduledNotificationsAsync();
     const nextEvents = await Promise.all(parsed.events.map(async (event) => {
-      await cancelReminders(event);
-      const cleanEvent = withoutNotificationIds(event);
-      return withNotificationIds(cleanEvent, notificationsEnabled ? await scheduleEventReminder(cleanEvent, notificationSounds) : []);
+      const cleanEvent = await restorePortableEvent(withoutNotificationIds(event));
+      const ids = notificationsEnabled && !cleanEvent.done && !cleanEvent.archived ? await scheduleEventReminder(cleanEvent, notificationSounds) : [];
+      return withNotificationIds(cleanEvent, ids);
     }));
     setEvents(nextEvents); setSubjectColors(nextColors); setSubjectReminderPlans(nextSubjectPlans); if (parsed.reminderDefaults) setReminderDefaults(normalizeReminderDefaults(parsed.reminderDefaults));
     await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); await AsyncStorage.setItem(SUBJECT_REMINDER_PLANS_KEY, JSON.stringify(nextSubjectPlans)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
     return { events: nextEvents.length, subjects: Object.keys(nextColors).length };
   };
   const exportData = async () => {
-    const payload = buildTransferPayload();
+    const payload = await buildTransferPayload();
     const uri = `${FileSystem.cacheDirectory}school-calendar-${Date.now()}.json`;
     await FileSystem.writeAsStringAsync(uri, JSON.stringify(payload, null, 2), { encoding: FileSystem.EncodingType.UTF8 });
     if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(uri, { mimeType: "application/json", dialogTitle: "تصدير روزنامتي الدراسية" });
@@ -506,12 +550,13 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
       if (!isValidTransferData(parsed)) return { imported: false, message: "يحتوي الملف على موعد أو مادة غير صالحة" };
       const nextColors = parsed.subjectColors;
       const nextSubjectPlans = parsed.subjectReminderPlans ?? {};
-      const nextEvents = await Promise.all(parsed.events.map(async (event) => {
-        await cancelReminders(event);
-        const cleanEvent = withoutNotificationIds(event);
-        return withNotificationIds(cleanEvent, notificationsEnabled ? await scheduleEventReminder(cleanEvent, notificationSounds) : []);
-      }));
       if (!(await confirmReplacement())) return { imported: false, message: "تم إلغاء الاستيراد" };
+      if (Platform.OS !== "web") await Notifications.cancelAllScheduledNotificationsAsync();
+      const nextEvents = await Promise.all(parsed.events.map(async (event) => {
+        const cleanEvent = await restorePortableEvent(withoutNotificationIds(event));
+        const ids = notificationsEnabled && !cleanEvent.done && !cleanEvent.archived ? await scheduleEventReminder(cleanEvent, notificationSounds) : [];
+        return withNotificationIds(cleanEvent, ids);
+      }));
       setEvents(nextEvents); setSubjectColors(nextColors); setSubjectReminderPlans(nextSubjectPlans); if (parsed.reminderDefaults) setReminderDefaults(normalizeReminderDefaults(parsed.reminderDefaults));
       await persist(nextEvents); await AsyncStorage.setItem(SUBJECT_COLORS_KEY, JSON.stringify(nextColors)); await AsyncStorage.setItem(SUBJECT_REMINDER_PLANS_KEY, JSON.stringify(nextSubjectPlans)); if (parsed.reminderDefaults) await AsyncStorage.setItem(REMINDER_DEFAULTS_KEY, JSON.stringify(parsed.reminderDefaults));
       return { imported: true, message: `تم استيراد ${nextEvents.length} موعدًا و${Object.keys(nextColors).length} مادة` };
@@ -565,7 +610,7 @@ export function CalendarProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!hydrated) return;
     if (!autoSyncReady.current) { autoSyncReady.current = true; return; }
-    const timer = setTimeout(() => { void createTRPCClient().cloudSync.push.mutate({ payload: getCloudPayload() }).catch(() => undefined); }, 1200);
+    const timer = setTimeout(() => { void getCloudPayload().then((payload) => createTRPCClient().cloudSync.push.mutate({ payload })).catch(() => undefined); }, 1200);
     return () => clearTimeout(timer);
   }, [hydrated, events, subjectColors, subjectReminderPlans, reminderDefaults]);
 

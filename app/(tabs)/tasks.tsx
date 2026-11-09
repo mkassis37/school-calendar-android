@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
@@ -21,14 +21,16 @@ export default function TasksScreen() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editorVisible, setEditorVisible] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => { const timer = setInterval(() => setNow(new Date()), 30_000); return () => clearInterval(timer); }, []);
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
   const matchesSearch = (event: CalendarEvent) => !normalizedSearch || `${event.title} ${event.subject} ${event.notes ?? ""}`.toLocaleLowerCase().includes(normalizedSearch);
   const taskEvents = useMemo(() => events.filter((event) => !event.archived && event.type !== "lesson" && (filter === "all" || event.type === filter) && matchesSearch(event)).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)), [events, filter, normalizedSearch]);
   const archivedEvents = useMemo(() => events.filter((event) => event.archived && event.type !== "lesson" && (filter === "all" || event.type === filter) && matchesSearch(event)).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)), [events, filter, normalizedSearch]);
   const todayKey = toDateKey(new Date());
-  const currentStamp = `${todayKey} ${new Date().toTimeString().slice(0, 5)}`;
+  const currentStamp = `${todayKey} ${now.toTimeString().slice(0, 5)}`;
   const overdue = useMemo(() => taskEvents.filter((event) => !event.done && `${event.date} ${event.time}` < currentStamp), [taskEvents, currentStamp]);
-  const today = useMemo(() => taskEvents.filter((event) => !event.done && event.date === todayKey), [taskEvents, todayKey]);
+  const today = useMemo(() => taskEvents.filter((event) => !event.done && event.date === todayKey && `${event.date} ${event.time}` >= currentStamp), [taskEvents, todayKey, currentStamp]);
   const upcoming = useMemo(() => taskEvents.filter((event) => !event.done && `${event.date} ${event.time}` >= currentStamp), [taskEvents, currentStamp]);
   const completed = useMemo(() => taskEvents.filter((event) => event.done), [taskEvents]);
   const visibleEvents = tab === "overdue" ? overdue : tab === "today" ? today : tab === "upcoming" ? upcoming : tab === "completed" ? completed : archivedEvents;
@@ -58,16 +60,17 @@ export default function TasksScreen() {
     const graded = weekEvents.filter((event) => event.type === "exam" && event.grade);
     const gradePercent = graded.length ? Math.round(graded.reduce((sum, event) => sum + ((event.grade!.score / event.grade!.max) * 100), 0) / graded.length) : 0;
     const bar = (label: string, value: number, color: string) => `<div class="metric"><div><span>${label}</span><b>${value}%</b></div><div class="track"><i style="width:${value}%;background:${color}"></i></div></div>`;
-    const html = `<html><head><meta charset="utf-8"><style>body{font-family:Arial;direction:rtl;padding:24px;color:#142330}h1{color:#1AA394}.metric{margin:18px 0}.metric div:first-child{display:flex;justify-content:space-between}.track{height:12px;background:#E7ECF2;border-radius:8px;margin-top:6px}.track i{display:block;height:100%;border-radius:8px}.cards{display:flex;gap:12px}.card{padding:14px;background:#E5F6F2;border-radius:12px;flex:1}table{width:100%;border-collapse:collapse;margin-top:20px}td,th{padding:9px;border-bottom:1px solid #E7ECF2;text-align:right}</style></head><body><h1>التقرير الأسبوعي الدراسي</h1><p>روزنامتي الدراسية · ${now.toLocaleDateString("ar-SA")}</p>${bar("إنجاز الواجبات", completion, "#1AA394")}${bar("إنجاز الامتحانات", examCompletion, "#C04A75")}${bar("متوسط الدرجات", gradePercent, "#D28A24")}<div class="cards"><div class="card">المهام المنجزة: ${weekly.done} من ${weekly.total}</div><div class="card">امتحانات لها درجات: ${graded.length}</div></div><table><tr><th>الامتحان</th><th>المادة</th><th>الدرجة</th></tr>${graded.map((event) => `<tr><td>${event.title}</td><td>${event.subject}</td><td>${event.grade!.score} / ${event.grade!.max}</td></tr>`).join("")}</table></body></html>`;
+    const html = `<html><head><meta charset="utf-8"><style>body{font-family:Arial;direction:rtl;padding:24px;color:#142330}h1{color:#1AA394}.metric{margin:18px 0}.metric div:first-child{display:flex;justify-content:space-between}.track{height:12px;background:#E7ECF2;border-radius:8px;margin-top:6px}.track i{display:block;height:100%;border-radius:8px}.cards{display:flex;gap:12px}.card{padding:14px;background:#E5F6F2;border-radius:12px;flex:1}table{width:100%;border-collapse:collapse;margin-top:20px}td,th{padding:9px;border-bottom:1px solid #E7ECF2;text-align:right}</style></head><body><h1>التقرير الأسبوعي الدراسي</h1><p>روزنامتي الدراسية · ${now.toLocaleDateString("ar-SA")}</p>${bar("إنجاز الواجبات", weekly.homeworkPercent, "#1AA394")}${bar("إنجاز الامتحانات", weekly.examPercent, "#C04A75")}${bar("متوسط الدرجات", gradePercent, "#D28A24")}<div class="cards"><div class="card">المهام المنجزة: ${weekly.done} من ${weekly.total}</div><div class="card">امتحانات لها درجات: ${graded.length}</div></div><table><tr><th>الامتحان</th><th>المادة</th><th>الدرجة</th></tr>${graded.map((event) => `<tr><td>${event.title}</td><td>${event.subject}</td><td>${event.grade!.score} / ${event.grade!.max}</td></tr>`).join("")}</table></body></html>`;
     try { const result = await Print.printToFileAsync({ html }); if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(result.uri, { mimeType: "application/pdf", dialogTitle: "التقرير الأسبوعي" }); } catch { Alert.alert("تعذر إنشاء التقرير", "حاول مرة أخرى."); }
   };
-  const total = events.filter((event) => event.type === "homework").length;
-  const done = events.filter((event) => event.type === "homework" && event.done).length;
+  const activeEvents = events.filter((event) => !event.archived);
+  const total = activeEvents.filter((event) => event.type === "homework").length;
+  const done = activeEvents.filter((event) => event.type === "homework" && event.done).length;
   const completion = homeworkProgress(total, done);
-  const examTotal = events.filter((event) => event.type === "exam").length;
-  const examDone = events.filter((event) => event.type === "exam" && event.done).length;
+  const examTotal = activeEvents.filter((event) => event.type === "exam").length;
+  const examDone = activeEvents.filter((event) => event.type === "exam" && event.done).length;
   const examCompletion = homeworkProgress(examTotal, examDone);
-  const weekly = weeklyStudySummary(events);
+  const weekly = weeklyStudySummary(activeEvents);
   const todayReminders = dailyReminderSummary(events);
   const subjectUsage = useMemo(() => events.reduce<Record<string, number>>((counts, event) => { counts[event.subject] = (counts[event.subject] ?? 0) + 1; return counts; }, {}), [events]);
   const openNew = () => { setEditingEvent(null); setEditorVisible(true); };
