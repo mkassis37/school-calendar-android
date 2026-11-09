@@ -1,7 +1,6 @@
 import { Tabs } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Platform } from "react-native";
-
 import { HapticTab } from "@/components/haptic-tab";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { useColors } from "@/hooks/use-colors";
@@ -11,9 +10,9 @@ export default function TabLayout() {
   const insets = useSafeAreaInsets();
   const bottomPadding = Platform.OS === "web" ? 12 : Math.max(insets.bottom, 8);
   const tabBarHeight = 60 + bottomPadding;
-
   return (
     <Tabs
+      initialRouteName="today"
       screenOptions={{
         tabBarActiveTintColor: colors.tint,
         tabBarInactiveTintColor: "#8A95A3",
@@ -24,33 +23,16 @@ export default function TabLayout() {
           paddingTop: 8,
           paddingBottom: bottomPadding,
           height: tabBarHeight,
-          backgroundColor: "#FFFFFF",
-          borderTopColor: "#E7ECF2",
+          backgroundColor: colors.surface,
+          borderTopColor: colors.border,
           borderTopWidth: 1,
         },
       }}
     >
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: "التقويم",
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="calendar" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="tasks"
-        options={{
-          title: "المهام",
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="checklist" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: "الإعدادات",
-          tabBarIcon: ({ color }) => <IconSymbol size={24} name="settings" color={color} />,
-        }}
-      />
+      <Tabs.Screen name="today" options={{ title: "اليوم", tabBarIcon: ({ color }) => <IconSymbol size={24} name="today" color={color} /> }} />
+      <Tabs.Screen name="calendar" options={{ title: "التقويم", tabBarIcon: ({ color }) => <IconSymbol size={24} name="calendar" color={color} /> }} />
+      <Tabs.Screen name="tasks" options={{ title: "المهام", tabBarIcon: ({ color }) => <IconSymbol size={24} name="checklist" color={color} /> }} />
+      <Tabs.Screen name="more" options={{ title: "المزيد", tabBarIcon: ({ color }) => <IconSymbol size={24} name="menu" color={color} /> }} />
     </Tabs>
   );
 }

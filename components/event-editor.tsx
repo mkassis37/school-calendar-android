@@ -38,6 +38,7 @@ export function EventEditor({
   subjectUsage = {},
   onAddSubject,
   preferredTimeFormat = 24,
+  defaultType,
 }: {
   visible: boolean;
   event?: CalendarEvent | null;
@@ -50,6 +51,7 @@ export function EventEditor({
   subjectUsage?: Record<string, number>;
   onAddSubject?: (subject: string) => Promise<void>;
   preferredTimeFormat?: 12 | 24;
+  defaultType?: EventType;
 }) {
   const [title, setTitle] = useState("");
   const [subject, setSubject] = useState("");
@@ -98,7 +100,7 @@ export function EventEditor({
     setTime(event?.time ?? "08:00");
     setTimeFormat(preferredTimeFormat);
     const initialHour = Number((event?.time ?? "08:00").split(":")[0]); setPeriod(initialHour >= 12 ? "PM" : "AM");
-    setType(event?.type ?? "lesson");
+    setType(event?.type ?? defaultType ?? "lesson");
     setImportance(event?.importance ?? "normal");
     setStatus(event?.status ?? (event?.done ? "completed" : "not_started"));
     const configuredReminders = event?.subject ? (subjectReminderPlans?.[event.subject] ?? reminderDefaults?.[event?.type ?? "lesson"] ?? [15]) : (reminderDefaults?.[event?.type ?? "lesson"] ?? [15]);
@@ -115,7 +117,7 @@ export function EventEditor({
     setGradeScore(event?.grade ? String(event.grade.score) : "");
     setGradeMax(event?.grade ? String(event.grade.max) : "100");
     setRepeatWeekly(event?.repeatWeekly ?? false);
-  }, [visible, event, defaultDate, reminderDefaults, subjectReminderPlans, preferredTimeFormat]);
+  }, [visible, event, defaultDate, reminderDefaults, subjectReminderPlans, preferredTimeFormat, defaultType]);
 
   const changeType = (next: EventType) => {
     setType(next);

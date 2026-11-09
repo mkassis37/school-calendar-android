@@ -1,0 +1,1 @@
+{"routes":[{"path":"/","title":"اليوم"},{"path":"/calendar","title":"التقويم"},{"path":"/tasks","title":"المهام"},{"path":"/more","title":"المزيد"},{"path":"/oauth/callback","title":"تسجيل الدخول"}]}
