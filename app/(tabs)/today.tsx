@@ -7,7 +7,7 @@ import { EVENT_META, arabicNumber, formatArabicDate, parseDateKey, toDateKey, us
 import { formatDisplayTime, homeworkProgress } from "@/lib/calendar-utils";
 
 const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2", amber: "#D28A24", rose: "#C04A75" };
-const quickActions: Array<{ type: EventType; label: string; icon: "calendar" | "assignment" | "exam"; color: string }> = [
+const quickActions: { type: EventType; label: string; icon: "calendar" | "assignment" | "exam"; color: string }[] = [
   { type: "lesson", label: "موعد", icon: "calendar", color: "#2878C8" },
   { type: "homework", label: "واجب", icon: "assignment", color: C.teal },
   { type: "exam", label: "امتحان", icon: "exam", color: C.rose },

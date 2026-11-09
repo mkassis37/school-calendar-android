@@ -97,10 +97,6 @@ export function EventEditor({
   const [gradeScore, setGradeScore] = useState("");
   const [gradeMax, setGradeMax] = useState("100");
   const [repeatWeekly, setRepeatWeekly] = useState(false);
-  const [dateMenu, setDateMenu] = useState<"day" | "month" | "year" | null>(
-    null,
-  );
-  const [timeMenu, setTimeMenu] = useState<"hour" | "minute" | null>(null);
   const [clockVisible, setClockVisible] = useState(false);
   const [calendarVisible, setCalendarVisible] = useState(false);
   const [timeFormat, setTimeFormat] = useState<12 | 24>(24);
@@ -260,33 +256,8 @@ export function EventEditor({
     setAttachments((current) => [...current, ...selected]);
   };
   const [dateYear, dateMonth, dateDay] = date.split("-").map(Number);
-  const daysInMonth = new Date(dateYear || 2026, dateMonth || 1, 0).getDate();
-  const years = Array.from(
-    { length: 11 },
-    (_, index) => new Date().getFullYear() - 5 + index,
-  );
-  const months = Array.from({ length: 12 }, (_, index) => index + 1);
-  const days = Array.from({ length: daysInMonth }, (_, index) => index + 1);
-  const updateDatePart = (part: "day" | "month" | "year", value: number) => {
-    let nextYear = dateYear || new Date().getFullYear();
-    let nextMonth = dateMonth || 1;
-    let nextDay = dateDay || 1;
-    if (part === "year") nextYear = value;
-    if (part === "month") nextMonth = value;
-    if (part === "day") nextDay = value;
-    const maxDay = new Date(nextYear, nextMonth, 0).getDate();
-    setDate(
-      `${nextYear}-${String(nextMonth).padStart(2, "0")}-${String(Math.min(nextDay, maxDay)).padStart(2, "0")}`,
-    );
-    setDateMenu(null);
-  };
   const [timeHour, timeMinute] = time.split(":").map(Number);
   const displayHour = timeFormat === 12 ? timeHour % 12 || 12 : timeHour;
-  const hours = Array.from(
-    { length: timeFormat === 12 ? 12 : 24 },
-    (_, index) => (timeFormat === 12 ? index + 1 : index),
-  );
-  const minutes = Array.from({ length: 60 }, (_, index) => index);
   const updateTimePart = (part: "hour" | "minute", value: number) => {
     const hour =
       part === "hour"
@@ -298,7 +269,6 @@ export function EventEditor({
     setTime(
       `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`,
     );
-    setTimeMenu(null);
   };
   const changePeriod = (next: "AM" | "PM") => {
     const hour12 = timeHour % 12;

@@ -3,7 +3,7 @@ import { Alert, FlatList, Modal, PanResponder, Pressable, StyleSheet, Text, View
 import { ScreenContainer } from "@/components/screen-container";
 import { EventEditor } from "@/components/event-editor";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { addDays, arabicNumber, ARABIC_MONTHS, EVENT_META, formatArabicDate, parseDateKey, toDateKey, useCalendar, WEEK_DAYS, type CalendarEvent } from "@/lib/calendar-store";
+import { arabicNumber, ARABIC_MONTHS, EVENT_META, formatArabicDate, parseDateKey, toDateKey, useCalendar, WEEK_DAYS, type CalendarEvent } from "@/lib/calendar-store";
 import { formatDisplayTime, normalizeReminderMinutes } from "@/lib/calendar-utils";
 
 const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2", soft: "#EDF8F6", amber: "#D28A24" };

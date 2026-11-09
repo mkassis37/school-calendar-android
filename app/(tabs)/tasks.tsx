@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from "react-native";
 import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
@@ -6,12 +6,11 @@ import { ScreenContainer } from "@/components/screen-container";
 import { EventEditor } from "@/components/event-editor";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import { EVENT_META, arabicNumber, formatArabicDate, parseDateKey, toDateKey, useCalendar, type CalendarEvent, type EventType } from "@/lib/calendar-store";
-import { dailyReminderSummary, examPlanProgress, homeworkProgress, weeklyStudySummary } from "@/lib/calendar-utils";
-import { formatDisplayTime } from "@/lib/calendar-utils";
+import { dailyReminderSummary, examPlanProgress, formatDisplayTime, homeworkProgress, weeklyStudySummary } from "@/lib/calendar-utils";
 
 const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2" };
 const SUBJECT_COLORS = ["#2878C8", "#E26B45", "#0F8C7D", "#8559B4", "#C04A75", "#D28A24", "#6B63C5", "#3B9BDB"];
-const filters: Array<{ key: "all" | EventType; label: string }> = [{ key: "all", label: "الكل" }, { key: "homework", label: "الواجبات" }, { key: "exam", label: "الامتحانات" }, { key: "evaluation", label: "التقييمات" }, { key: "activity", label: "الأنشطة" }];
+const filters: { key: "all" | EventType; label: string }[] = [{ key: "all", label: "الكل" }, { key: "homework", label: "الواجبات" }, { key: "exam", label: "الامتحانات" }, { key: "evaluation", label: "التقييمات" }, { key: "activity", label: "الأنشطة" }];
 
 export default function TasksScreen() {
   const { events, addEvent, updateEvent, toggleEvent, deleteEvent, setEventArchived, reminderDefaults, subjectReminderPlans, subjectColors, timeFormat, addSubject } = useCalendar();
@@ -24,9 +23,9 @@ export default function TasksScreen() {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => { const timer = setInterval(() => setNow(new Date()), 30_000); return () => clearInterval(timer); }, []);
   const normalizedSearch = searchQuery.trim().toLocaleLowerCase();
-  const matchesSearch = (event: CalendarEvent) => !normalizedSearch || `${event.title} ${event.subject} ${event.notes ?? ""}`.toLocaleLowerCase().includes(normalizedSearch);
-  const taskEvents = useMemo(() => events.filter((event) => !event.archived && event.type !== "lesson" && (filter === "all" || event.type === filter) && matchesSearch(event)).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)), [events, filter, normalizedSearch]);
-  const archivedEvents = useMemo(() => events.filter((event) => event.archived && event.type !== "lesson" && (filter === "all" || event.type === filter) && matchesSearch(event)).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)), [events, filter, normalizedSearch]);
+  const matchesSearch = useCallback((event: CalendarEvent) => !normalizedSearch || `${event.title} ${event.subject} ${event.notes ?? ""}`.toLocaleLowerCase().includes(normalizedSearch), [normalizedSearch]);
+  const taskEvents = useMemo(() => events.filter((event) => !event.archived && event.type !== "lesson" && (filter === "all" || event.type === filter) && matchesSearch(event)).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)), [events, filter, matchesSearch]);
+  const archivedEvents = useMemo(() => events.filter((event) => event.archived && event.type !== "lesson" && (filter === "all" || event.type === filter) && matchesSearch(event)).sort((a, b) => `${a.date} ${a.time}`.localeCompare(`${b.date} ${b.time}`)), [events, filter, matchesSearch]);
   const todayKey = toDateKey(new Date());
   const currentStamp = `${todayKey} ${now.toTimeString().slice(0, 5)}`;
   const overdue = useMemo(() => taskEvents.filter((event) => !event.done && `${event.date} ${event.time}` < currentStamp), [taskEvents, currentStamp]);
