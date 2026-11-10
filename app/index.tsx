@@ -6,5 +6,5 @@ import { Redirect } from "expo-router";
  * path. Keep a real root route so a bare launch never shows "Unmatched Route".
  */
 export default function RootRedirect() {
-  return <Redirect href="/(tabs)" />;
+  return <Redirect href="/today" />;
 }
