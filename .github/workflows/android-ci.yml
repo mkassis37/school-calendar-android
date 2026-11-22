@@ -47,7 +47,7 @@ jobs:
         run: pnpm check
 
       - name: Run available tests
-        run: pnpm test --passWithNoTests
+        run: pnpm test
 
       - name: Generate native Android project
         run: pnpm exec expo prebuild --platform android --no-install
