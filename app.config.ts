@@ -86,6 +86,15 @@ const config: ExpoConfig = {
   },
   plugins: [
     "expo-router",
+    ["expo-image-picker", {
+      photosPermission: "اسمح للتطبيق بإرفاق صور الدروس والواجبات.",
+      cameraPermission: "اسمح للتطبيق بالتقاط صورة لإرفاقها بالامتحان أو الواجب.",
+      microphonePermission: false,
+    }],
+    ["expo-audio", {
+      microphonePermission: "اسمح للتطبيق بتسجيل نغمة تنبيه تختارها.",
+      enableBackgroundRecording: false,
+    }],
     [
       "expo-notifications",
       {
