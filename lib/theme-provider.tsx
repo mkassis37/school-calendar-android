@@ -52,7 +52,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         root.style.setProperty(`--color-${token}`, value);
       });
     }
-  }, []);
+  }, [customColors]);
 
   const setCustomColors = useCallback((colors: CustomColors) => {
     setCustomColorsState(colors);
