@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
 import * as FileSystem from "expo-file-system/legacy";
 import { IconSymbol } from "@/components/ui/icon-symbol";
 import {
@@ -258,6 +259,29 @@ export function EventEditor({
       }),
     );
     setAttachments((current) => [...current, ...selected]);
+  };
+
+  const addCameraPhoto = async () => {
+    if (attachments.length >= 12) {
+      Alert.alert("اكتملت المرفقات", "يمكنك إضافة 12 مرفقًا كحد أقصى لكل موعد.");
+      return;
+    }
+    const permission = await ImagePicker.requestCameraPermissionsAsync();
+    if (!permission.granted) {
+      Alert.alert("إذن الكاميرا مطلوب", "اسمح للتطبيق باستخدام الكاميرا لالتقاط صورة للمرفق.");
+      return;
+    }
+    const result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.85 });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const directory = `${FileSystem.documentDirectory ?? FileSystem.cacheDirectory}school-calendar-attachments/`;
+    await FileSystem.makeDirectoryAsync(directory, { intermediates: true });
+    const name = asset.fileName ?? `photo-${id}.jpg`;
+    const target = `${directory}${id}-${name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+    let uri = asset.uri;
+    try { await FileSystem.copyAsync({ from: asset.uri, to: target }); uri = target; } catch {}
+    setAttachments((current) => [...current, { id, name, uri, mimeType: asset.mimeType ?? "image/jpeg", size: asset.fileSize }]);
   };
   const [dateYear, dateMonth, dateDay] = date.split("-").map(Number);
   const [timeHour, timeMinute] = time.split(":").map(Number);
@@ -838,13 +862,16 @@ export function EventEditor({
               <View style={styles.attachmentBox}>
                 <View style={styles.attachmentHeader}>
                   <Text style={styles.planTitle}>المرفقات</Text>
-                  <Pressable
-                    onPress={() => void addAttachments()}
-                    style={styles.attachButton}
-                  >
-                    <IconSymbol name="add" size={15} color={colors.primary} />
-                    <Text style={styles.attachText}>إضافة صورة أو ملف</Text>
-                  </Pressable>
+                  <View style={{ flexDirection: "row-reverse", gap: 7 }}>
+                    <Pressable onPress={() => void addCameraPhoto()} style={styles.attachButton}>
+                      <IconSymbol name="camera" size={15} color={colors.primary} />
+                      <Text style={styles.attachText}>الكاميرا</Text>
+                    </Pressable>
+                    <Pressable onPress={() => void addAttachments()} style={styles.attachButton}>
+                      <IconSymbol name="add" size={15} color={colors.primary} />
+                      <Text style={styles.attachText}>اختيار ملف</Text>
+                    </Pressable>
+                  </View>
                 </View>
                 {attachments.map((attachment) => (
                   <View key={attachment.id} style={styles.attachmentRow}>
