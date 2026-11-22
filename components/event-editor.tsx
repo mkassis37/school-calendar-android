@@ -864,7 +864,7 @@ export function EventEditor({
                   <Text style={styles.planTitle}>المرفقات</Text>
                   <View style={{ flexDirection: "row-reverse", gap: 7 }}>
                     <Pressable onPress={() => void addCameraPhoto()} style={styles.attachButton}>
-                      <IconSymbol name="camera" size={15} color={colors.primary} />
+                      <IconSymbol name="add" size={15} color={colors.primary} />
                       <Text style={styles.attachText}>الكاميرا</Text>
                     </Pressable>
                     <Pressable onPress={() => void addAttachments()} style={styles.attachButton}>

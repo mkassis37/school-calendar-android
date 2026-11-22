@@ -15,7 +15,7 @@ export function SoundLibrarySettings() {
   const [sounds, setSounds] = useState<SavedSounds>(EMPTY);
   const [downloadUrl, setDownloadUrl] = useState("");
   const [busy, setBusy] = useState(false);
-  const recorder = useAudioRecorder({ ...RecordingPresets.HIGH_QUALITY, directory: "document" });
+  const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
   const activeUri = sounds[kind]?.uri ?? null;
   const player = useAudioPlayer(activeUri);
