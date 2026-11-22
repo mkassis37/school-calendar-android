@@ -26,6 +26,11 @@ import { CalendarProvider } from "@/lib/calendar-store";
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
 
+function ThemedStatusBar() {
+  const colorScheme = useColorScheme();
+  return <StatusBar style={colorScheme === "dark" ? "light" : "dark"} />;
+}
+
 export default function RootLayout() {
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
   const initialFrame = initialWindowMetrics?.frame ?? DEFAULT_WEB_FRAME;
@@ -77,7 +82,7 @@ export default function RootLayout() {
               <Stack.Screen name="oauth/callback" />
             </Stack>
           </CalendarProvider>
-          <StatusBar style={useColorScheme() === "dark" ? "light" : "dark"} />
+          <ThemedStatusBar />
         </QueryClientProvider>
       </trpc.Provider>
     </GestureHandlerRootView>
