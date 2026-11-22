@@ -22,13 +22,31 @@ const alarmParts = (time: string): { hour: number; minute: number; period: "صب
 
 export default function SettingsScreen() {
   const { notificationsEnabled, requestNotifications, subjectColors: savedSubjectColors, subjectReminderPlans, notificationHistory, clearNotificationHistory, setSubjectColor, setSubjectReminderPlan, addSubject, removeSubject, notificationSounds, setNotificationSound, reminderDefaults, setReminderPlan, exportData, importData, alarmEnabled, alarmTime, setDailyAlarm, previewAlarmSound, timeFormat, setTimeFormat } = useCalendar();
-  const { colorScheme, setColorScheme } = useThemeContext();
+  const { colorScheme, setColorScheme, customColors, setCustomColors, resetCustomColors } = useThemeContext();
   const darkMode = colorScheme === "dark";
   const enable = async () => { const granted = await requestNotifications(); if (!granted) Alert.alert("التنبيهات غير مفعّلة", "يمكنك تفعيلها من إعدادات Android للسماح بالتذكير قبل الدروس والواجبات."); };
   const [newSubject, setNewSubject] = useState("");
   const [syncMessage, setSyncMessage] = useState("");
   const [updateMessage, setUpdateMessage] = useState("");
   const [alarmClockVisible, setAlarmClockVisible] = useState(false);
+  const [colorDraft, setColorDraft] = useState<Record<string, string>>({});
+  useEffect(() => {
+    setColorDraft({
+      primary: customColors.primary ?? "#1AA394",
+      background: customColors.background ?? "#F7F9FC",
+      surface: customColors.surface ?? "#FFFFFF",
+      foreground: customColors.foreground ?? "#142330",
+      muted: customColors.muted ?? "#738291",
+      border: customColors.border ?? "#E7ECF2",
+    });
+  }, [customColors]);
+  const colorPresets = [
+    { name: "الافتراضي", colors: { primary: "#1AA394", background: "#F7F9FC", surface: "#FFFFFF", foreground: "#142330", muted: "#738291", border: "#E7ECF2" } },
+    { name: "أزرق هادئ", colors: { primary: "#3977C3", background: "#F3F7FC", surface: "#FFFFFF", foreground: "#18283C", muted: "#71839A", border: "#DCE6F1" } },
+    { name: "بنفسجي", colors: { primary: "#8057B7", background: "#F7F4FB", surface: "#FFFFFF", foreground: "#2A2038", muted: "#80748F", border: "#E7DFF0" } },
+    { name: "أخضر", colors: { primary: "#39865B", background: "#F2F8F3", surface: "#FFFFFF", foreground: "#1C3024", muted: "#718578", border: "#DCE9DF" } },
+  ];
+
   const cloudPull = trpc.cloudSync.pull.useQuery(undefined, { enabled: false });
   const cloudPush = trpc.cloudSync.push.useMutation();
   const subjects = Object.keys(savedSubjectColors);
@@ -90,7 +108,36 @@ export default function SettingsScreen() {
     <View style={styles.card}><SoundChoice label="صوت الواجبات" value={notificationSounds.homework} onChange={(value) => void setNotificationSound("homework", value)} /><View style={styles.divider} /><SoundChoice label="صوت الامتحانات" value={notificationSounds.exam} onChange={(value) => void setNotificationSound("exam", value)} /></View>
     <View style={styles.card}><Text style={styles.planHint}>اختر أكثر من وقت، وسيُطبّق تلقائيًا عند إنشاء موعد جديد.</Text>{(["lesson", "homework", "exam", "evaluation", "activity"] as EventType[]).map((type, index) => <View key={type}>{index > 0 && <View style={styles.divider} />}<ReminderPlanChoice label={{ lesson: "الحصص", homework: "الواجبات", exam: "الامتحانات", evaluation: "التقييمات", activity: "الأنشطة" }[type]} type={type} value={reminderDefaults[type]} onChange={(value) => void setReminderPlan(type, value)} /></View>)}</View>
   </>;
-  const appearancePage = <><Text style={styles.section}>المظهر</Text><View style={styles.card}><View style={styles.settingRow}><View style={[styles.settingIcon, { backgroundColor: darkMode ? "#2D2850" : "#F2EBF8" }]}><IconSymbol name="settings" size={21} color={darkMode ? "#B9A8FF" : "#8559B4"} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>الوضع الليلي</Text><Text style={styles.settingSub}>{darkMode ? "مفعّل الآن" : "استخدم مظهرًا داكنًا ليلًا"}</Text></View><Switch value={darkMode} onValueChange={(value) => setColorScheme(value ? "dark" : "light")} /></View></View><View style={styles.card}><View style={styles.settingRow}><View style={[styles.settingIcon, { backgroundColor: "#E5F6F2" }]}><IconSymbol name="today" size={21} color={C.teal} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>نظام عرض الوقت</Text><Text style={styles.settingSub}>{timeFormat === 12 ? "12 ساعة · صباحًا / مساءً" : "24 ساعة"}</Text></View></View><View style={styles.formatSettingRow}><Pressable onPress={() => void setTimeFormat(24)} style={[styles.formatSettingButton, timeFormat === 24 && styles.formatSettingActive]}><Text style={[styles.formatSettingText, timeFormat === 24 && styles.formatSettingTextActive]}>24 ساعة</Text></Pressable><Pressable onPress={() => void setTimeFormat(12)} style={[styles.formatSettingButton, timeFormat === 12 && styles.formatSettingActive]}><Text style={[styles.formatSettingText, timeFormat === 12 && styles.formatSettingTextActive]}>12 ساعة</Text></Pressable></View></View></>;
+  const palettePage = <View style={styles.card}>
+    <Text style={styles.settingTitle}>ألوان التطبيق</Text>
+    <Text style={styles.helper}>اختر مظهرًا جاهزًا أو أدخل رمز اللون بصيغة HEX مثل #1AA394.</Text>
+    <View style={{ flexDirection: "row-reverse", flexWrap: "wrap", gap: 7, padding: 12 }}>
+      {colorPresets.map((preset) => <Pressable key={preset.name} onPress={() => { setColorDraft(preset.colors); setCustomColors(preset.colors); }} style={{ borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 9, flexDirection: "row-reverse", alignItems: "center", gap: 6 }}>
+        <View style={{ width: 13, height: 13, borderRadius: 7, backgroundColor: preset.colors.primary }} />
+        <Text style={{ color: C.ink, fontSize: 10, fontWeight: "800" }}>{preset.name}</Text>
+      </Pressable>)}
+    </View>
+    {([{ key: "primary", label: "الأزرار واللون الأساسي" }, { key: "background", label: "خلفية التطبيق" }, { key: "surface", label: "خلفية البطاقات" }, { key: "foreground", label: "لون النصوص" }, { key: "muted", label: "النصوص الثانوية" }, { key: "border", label: "الحدود والفواصل" }] as const).map((item) => <View key={item.key} style={{ flexDirection: "row-reverse", alignItems: "center", paddingHorizontal: 13, paddingVertical: 7, gap: 9 }}>
+      <View style={{ width: 25, height: 25, borderRadius: 7, backgroundColor: colorDraft[item.key] ?? "#FFFFFF", borderWidth: 1, borderColor: C.border }} />
+      <Text style={{ flex: 1, color: C.ink, textAlign: "right", fontSize: 11 }}>{item.label}</Text>
+      <TextInput value={colorDraft[item.key] ?? ""} onChangeText={(value) => setColorDraft((current) => ({ ...current, [item.key]: value }))} autoCapitalize="characters" maxLength={7} placeholder="#RRGGBB" style={{ width: 104, borderWidth: 1, borderColor: C.border, borderRadius: 8, padding: 7, color: C.ink, textAlign: "center", fontSize: 11 }} />
+    </View>)}
+    <View style={{ margin: 13, borderRadius: 13, borderWidth: 1, borderColor: colorDraft.border ?? C.border, backgroundColor: colorDraft.background ?? C.canvas, padding: 12, gap: 8 }}>
+      <Text style={{ color: colorDraft.foreground ?? C.ink, textAlign: "right", fontWeight: "900" }}>معاينة المظهر</Text>
+      <Text style={{ color: colorDraft.muted ?? C.muted, textAlign: "right", fontSize: 11 }}>هذا مثال للنصوص والبطاقات والأزرار قبل الحفظ.</Text>
+      <View style={{ backgroundColor: colorDraft.surface ?? C.white, padding: 10, borderRadius: 9, borderWidth: 1, borderColor: colorDraft.border ?? C.border }}>
+        <Text style={{ color: colorDraft.foreground ?? C.ink, textAlign: "right" }}>بطاقة تجريبية</Text>
+      </View>
+      <View style={{ backgroundColor: colorDraft.primary ?? C.teal, padding: 10, borderRadius: 9 }}>
+        <Text style={{ color: "#FFFFFF", textAlign: "center", fontWeight: "800" }}>زر تجريبي</Text>
+      </View>
+    </View>
+    <View style={styles.transferRow}>
+      <Pressable onPress={() => { if (!Object.values(colorDraft).every((value) => /^#[0-9A-Fa-f]{6}$/.test(value))) { Alert.alert("لون غير صالح", "اكتب كل لون بصيغة HEX مثل #1AA394."); return; } setCustomColors(colorDraft); Alert.alert("تم الحفظ", "تم تطبيق الألوان المخصصة."); }} style={styles.transferButton}><Text style={styles.transferButtonText}>حفظ الألوان</Text></Pressable>
+      <Pressable onPress={() => { resetCustomColors(); setColorDraft({}); }} style={[styles.transferButton, styles.importButton]}><Text style={styles.importButtonText}>إعادة الافتراضي</Text></Pressable>
+    </View>
+  </View>;
+  const appearancePage = <><Text style={styles.section}>المظهر</Text><View style={styles.card}><View style={styles.settingRow}><View style={[styles.settingIcon, { backgroundColor: darkMode ? "#2D2850" : "#F2EBF8" }]}><IconSymbol name="settings" size={21} color={darkMode ? "#B9A8FF" : "#8559B4"} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>الوضع الليلي</Text><Text style={styles.settingSub}>{darkMode ? "مفعّل الآن" : "استخدم مظهرًا داكنًا ليلًا"}</Text></View><Switch value={darkMode} onValueChange={(value) => setColorScheme(value ? "dark" : "light")} /></View></View><View style={styles.card}><View style={styles.settingRow}><View style={[styles.settingIcon, { backgroundColor: "#E5F6F2" }]}><IconSymbol name="today" size={21} color={C.teal} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>نظام عرض الوقت</Text><Text style={styles.settingSub}>{timeFormat === 12 ? "12 ساعة · صباحًا / مساءً" : "24 ساعة"}</Text></View></View><View style={styles.formatSettingRow}><Pressable onPress={() => void setTimeFormat(24)} style={[styles.formatSettingButton, timeFormat === 24 && styles.formatSettingActive]}><Text style={[styles.formatSettingText, timeFormat === 24 && styles.formatSettingTextActive]}>24 ساعة</Text></Pressable><Pressable onPress={() => void setTimeFormat(12)} style={[styles.formatSettingButton, timeFormat === 12 && styles.formatSettingActive]}><Text style={[styles.formatSettingText, timeFormat === 12 && styles.formatSettingTextActive]}>12 ساعة</Text></Pressable></View>{palettePage}</>;
   const subjectsPage = <><Text style={styles.section}>المواد والتصنيفات</Text><View style={styles.card}><View style={styles.addSubjectRow}><TextInput value={newSubject} onChangeText={setNewSubject} placeholder="اسم المادة الجديدة" placeholderTextColor={C.muted} style={styles.subjectInput} textAlign="right" /><Pressable onPress={() => void addCustomSubject()} style={styles.addSubjectButton}><Text style={{ color: C.white, fontSize: 11, fontWeight: "900" }}>إضافة</Text></Pressable></View>{subjects.map((name, index) => <View key={name}><View style={[styles.subjectRow, index < subjects.length - 1 && styles.divider]}><Pressable onPress={() => void setSubjectColor(name, savedSubjectColors[name] === subjectColors[index % subjectColors.length] ? subjectColors[(index + 1) % subjectColors.length] : subjectColors[index % subjectColors.length])} style={[styles.subjectDot, { backgroundColor: savedSubjectColors[name] ?? subjectColors[index % subjectColors.length] }]} /><Text style={styles.subjectName}>{name}</Text><Pressable onPress={() => void removeSubject(name)}><Text style={{ color: "#C04A75", fontSize: 10, fontWeight: "800" }}>حذف</Text></Pressable></View><ReminderPlanChoice label={`تنبيهات ${name}`} type="lesson" value={subjectReminderPlans[name] ?? []} onChange={(value) => void setSubjectReminderPlan(name, value)} /></View>)}</View></>;
   const dataPage = <><Text style={styles.section}>نقل البيانات</Text><View style={styles.card}><Text style={styles.transferHint}>انقل المواد والمواعيد إلى هاتف آخر عبر ملف JSON محفوظ ومشاركته من جهازك.</Text><View style={styles.transferRow}><Pressable onPress={() => void exportData()} style={styles.transferButton}><Text style={styles.transferButtonText}>تصدير البيانات</Text></Pressable><Pressable onPress={() => void handleImport()} style={[styles.transferButton, styles.importButton]}><Text style={styles.importButtonText}>استيراد ملف</Text></Pressable></View></View><Text style={styles.section}>النسخ الاحتياطي السحابي</Text><View style={styles.card}><Text style={styles.transferHint}>احفظ نسخة احتياطية بشكل آمن واستعدها على جهاز آخر عند تسجيل الدخول.</Text><View style={styles.transferRow}><Pressable onPress={() => void uploadCloudBackup()} style={styles.transferButton}><Text style={styles.transferButtonText}>{cloudPush.isPending ? "جارٍ الحفظ..." : "حفظ سحابي الآن"}</Text></Pressable><Pressable onPress={() => void restoreCloudBackup()} style={[styles.transferButton, styles.importButton]}><Text style={styles.importButtonText}>{cloudPull.isFetching ? "جارٍ الاستعادة..." : "استعادة سحابية"}</Text></Pressable></View>{syncMessage ? <Text style={styles.syncMessage}>{syncMessage}</Text> : null}</View></>;
   const aboutPage = <><Text style={styles.section}>عن التطبيق</Text><View style={styles.aboutCard}><Image source={require("@/assets/images/school-calendar-hero-small.jpg")} style={{ width: 48, height: 48, borderRadius: 15 }} /><View style={styles.aboutCopy}><Text style={styles.aboutTitle}>روزنامتي الدراسية</Text><Text style={styles.aboutSub}>نسخة تجريبية · مصممة للدراسة بدون تعقيد</Text></View><Text style={styles.version}>الإصدار {appVersion}</Text></View><Text style={styles.section}>التحديثات</Text><View style={styles.card}><View style={styles.settingRow}><View style={[styles.settingIcon, { backgroundColor: "#E5F6F2" }]}><IconSymbol name="sync" size={21} color={C.teal} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>تحديث التطبيق</Text><Text style={styles.settingSub}>فحص النسخة وتنزيل وتثبيت APK بعد موافقتك</Text></View></View><Pressable onPress={() => void checkForUpdate()} style={styles.transferButton}><Text style={styles.transferButtonText}>فحص التحديثات</Text></Pressable>{updateMessage ? <Text style={styles.syncMessage}>{updateMessage}</Text> : null}</View><View style={styles.offline}><IconSymbol name="cloudOff" size={17} color={C.teal} /><Text style={styles.offlineText}>كل مواعيدك محفوظة على الجهاز ويمكن الوصول إليها بدون إنترنت.</Text></View></>;
