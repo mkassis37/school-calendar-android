@@ -110,35 +110,41 @@ export default function SettingsScreen() {
     <View style={styles.card}><SoundLibrarySettings /></View>
     <View style={styles.card}><Text style={styles.planHint}>اختر أكثر من وقت، وسيُطبّق تلقائيًا عند إنشاء موعد جديد.</Text>{(["lesson", "homework", "exam", "evaluation", "activity"] as EventType[]).map((type, index) => <View key={type}>{index > 0 && <View style={styles.divider} />}<ReminderPlanChoice label={{ lesson: "الحصص", homework: "الواجبات", exam: "الامتحانات", evaluation: "التقييمات", activity: "الأنشطة" }[type]} type={type} value={reminderDefaults[type]} onChange={(value) => void setReminderPlan(type, value)} /></View>)}</View>
   </>;
-  const palettePage = <View style={styles.card}>
-    <Text style={styles.settingTitle}>ألوان التطبيق</Text>
-    <Text style={styles.helper}>اختر مظهرًا جاهزًا أو أدخل رمز اللون بصيغة HEX مثل #1AA394.</Text>
-    <View style={{ flexDirection: "row-reverse", flexWrap: "wrap", gap: 7, padding: 12 }}>
-      {colorPresets.map((preset) => <Pressable key={preset.name} onPress={() => { setColorDraft(preset.colors); setCustomColors(preset.colors); }} style={{ borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 9, flexDirection: "row-reverse", alignItems: "center", gap: 6 }}>
-        <View style={{ width: 13, height: 13, borderRadius: 7, backgroundColor: preset.colors.primary }} />
-        <Text style={{ color: C.ink, fontSize: 10, fontWeight: "800" }}>{preset.name}</Text>
-      </Pressable>)}
-    </View>
-    {([{ key: "primary", label: "الأزرار واللون الأساسي" }, { key: "background", label: "خلفية التطبيق" }, { key: "surface", label: "خلفية البطاقات" }, { key: "foreground", label: "لون النصوص" }, { key: "muted", label: "النصوص الثانوية" }, { key: "border", label: "الحدود والفواصل" }] as const).map((item) => <View key={item.key} style={{ flexDirection: "row-reverse", alignItems: "center", paddingHorizontal: 13, paddingVertical: 7, gap: 9 }}>
-      <View style={{ width: 25, height: 25, borderRadius: 7, backgroundColor: colorDraft[item.key] ?? "#FFFFFF", borderWidth: 1, borderColor: C.border }} />
-      <Text style={{ flex: 1, color: C.ink, textAlign: "right", fontSize: 11 }}>{item.label}</Text>
-      <TextInput value={colorDraft[item.key] ?? ""} onChangeText={(value) => setColorDraft((current) => ({ ...current, [item.key]: value }))} autoCapitalize="characters" maxLength={7} placeholder="#RRGGBB" style={{ width: 104, borderWidth: 1, borderColor: C.border, borderRadius: 8, padding: 7, color: C.ink, textAlign: "center", fontSize: 11 }} />
-    </View>)}
-    <View style={{ margin: 13, borderRadius: 13, borderWidth: 1, borderColor: colorDraft.border ?? C.border, backgroundColor: colorDraft.background ?? C.canvas, padding: 12, gap: 8 }}>
-      <Text style={{ color: colorDraft.foreground ?? C.ink, textAlign: "right", fontWeight: "900" }}>معاينة المظهر</Text>
-      <Text style={{ color: colorDraft.muted ?? C.muted, textAlign: "right", fontSize: 11 }}>هذا مثال للنصوص والبطاقات والأزرار قبل الحفظ.</Text>
-      <View style={{ backgroundColor: colorDraft.surface ?? C.white, padding: 10, borderRadius: 9, borderWidth: 1, borderColor: colorDraft.border ?? C.border }}>
-        <Text style={{ color: colorDraft.foreground ?? C.ink, textAlign: "right" }}>بطاقة تجريبية</Text>
+  const palettePage = (
+    <View style={styles.card}>
+      <Text style={styles.settingTitle}>ألوان التطبيق</Text>
+      <Text style={styles.helper}>اختر مظهرًا جاهزًا أو أدخل رمز اللون بصيغة HEX مثل #1AA394.</Text>
+      <View style={{ flexDirection: "row-reverse", flexWrap: "wrap", gap: 7, padding: 12 }}>
+        {colorPresets.map((preset) => (
+          <Pressable key={preset.name} onPress={() => { setColorDraft(preset.colors); setCustomColors(preset.colors); }} style={{ borderWidth: 1, borderColor: C.border, borderRadius: 10, padding: 9 }}>
+            <Text style={{ color: C.ink, fontSize: 10, fontWeight: "800" }}>{preset.name}</Text>
+          </Pressable>
+        ))}
       </View>
-      <View style={{ backgroundColor: colorDraft.primary ?? C.teal, padding: 10, borderRadius: 9 }}>
-        <Text style={{ color: "#FFFFFF", textAlign: "center", fontWeight: "800" }}>زر تجريبي</Text>
+      <View style={{ padding: 12, gap: 8 }}>
+        <Text style={{ color: C.ink, textAlign: "right" }}>اللون الأساسي</Text>
+        <TextInput value={colorDraft.primary ?? "#1AA394"} onChangeText={(value) => setColorDraft((current) => ({ ...current, primary: value }))} placeholder="#1AA394" style={styles.subjectInput} />
+        <Text style={{ color: C.ink, textAlign: "right" }}>لون الخلفية</Text>
+        <TextInput value={colorDraft.background ?? "#F7F9FC"} onChangeText={(value) => setColorDraft((current) => ({ ...current, background: value }))} placeholder="#F7F9FC" style={styles.subjectInput} />
+        <Text style={{ color: C.ink, textAlign: "right" }}>لون البطاقات</Text>
+        <TextInput value={colorDraft.surface ?? "#FFFFFF"} onChangeText={(value) => setColorDraft((current) => ({ ...current, surface: value }))} placeholder="#FFFFFF" style={styles.subjectInput} />
+        <Text style={{ color: C.ink, textAlign: "right" }}>لون النصوص</Text>
+        <TextInput value={colorDraft.foreground ?? "#142330"} onChangeText={(value) => setColorDraft((current) => ({ ...current, foreground: value }))} placeholder="#142330" style={styles.subjectInput} />
+        <View style={{ backgroundColor: colorDraft.background ?? C.canvas, padding: 12, borderRadius: 10 }}>
+          <Text style={{ color: colorDraft.foreground ?? C.ink, textAlign: "right" }}>معاينة النص والخلفية</Text>
+          <View style={{ backgroundColor: colorDraft.primary ?? C.teal, padding: 9, borderRadius: 8, marginTop: 8 }}>
+            <Text style={{ color: "#FFFFFF", textAlign: "center" }}>زر تجريبي</Text>
+          </View>
+        </View>
+        <Pressable onPress={() => setCustomColors(colorDraft)} style={styles.transferButton}>
+          <Text style={styles.transferButtonText}>حفظ الألوان</Text>
+        </Pressable>
+        <Pressable onPress={() => { resetCustomColors(); setColorDraft({ primary: "#1AA394", background: "#F7F9FC", surface: "#FFFFFF", foreground: "#142330", muted: "#738291", border: "#E7ECF2" }); }} style={[styles.transferButton, styles.importButton]}>
+          <Text style={styles.importButtonText}>إعادة الافتراضي</Text>
+        </Pressable>
       </View>
     </View>
-    <View style={styles.transferRow}>
-      <Pressable onPress={() => { if (!Object.values(colorDraft).every((value) => /^#[0-9A-Fa-f]{6}$/.test(value))) { Alert.alert("لون غير صالح", "اكتب كل لون بصيغة HEX مثل #1AA394."); return; } setCustomColors(colorDraft); Alert.alert("تم الحفظ", "تم تطبيق الألوان المخصصة."); }} style={styles.transferButton}><Text style={styles.transferButtonText}>حفظ الألوان</Text></Pressable>
-      <Pressable onPress={() => { resetCustomColors(); setColorDraft({}); }} style={[styles.transferButton, styles.importButton]}><Text style={styles.importButtonText}>إعادة الافتراضي</Text></Pressable>
-    </View>
-  </View>;
+  );
   const appearancePage = <><Text style={styles.section}>المظهر</Text><View style={styles.card}><View style={styles.settingRow}><View style={[styles.settingIcon, { backgroundColor: darkMode ? "#2D2850" : "#F2EBF8" }]}><IconSymbol name="settings" size={21} color={darkMode ? "#B9A8FF" : "#8559B4"} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>الوضع الليلي</Text><Text style={styles.settingSub}>{darkMode ? "مفعّل الآن" : "استخدم مظهرًا داكنًا ليلًا"}</Text></View><Switch value={darkMode} onValueChange={(value) => setColorScheme(value ? "dark" : "light")} /></View></View><View style={styles.card}><View style={styles.settingRow}><View style={[styles.settingIcon, { backgroundColor: "#E5F6F2" }]}><IconSymbol name="today" size={21} color={C.teal} /></View><View style={styles.settingCopy}><Text style={styles.settingTitle}>نظام عرض الوقت</Text><Text style={styles.settingSub}>{timeFormat === 12 ? "12 ساعة · صباحًا / مساءً" : "24 ساعة"}</Text></View></View><View style={styles.formatSettingRow}><Pressable onPress={() => void setTimeFormat(24)} style={[styles.formatSettingButton, timeFormat === 24 && styles.formatSettingActive]}><Text style={[styles.formatSettingText, timeFormat === 24 && styles.formatSettingTextActive]}>24 ساعة</Text></Pressable><Pressable onPress={() => void setTimeFormat(12)} style={[styles.formatSettingButton, timeFormat === 12 && styles.formatSettingActive]}><Text style={[styles.formatSettingText, timeFormat === 12 && styles.formatSettingTextActive]}>12 ساعة</Text></Pressable></View>{palettePage}</>;
   const subjectsPage = <><Text style={styles.section}>المواد والتصنيفات</Text><View style={styles.card}><View style={styles.addSubjectRow}><TextInput value={newSubject} onChangeText={setNewSubject} placeholder="اسم المادة الجديدة" placeholderTextColor={C.muted} style={styles.subjectInput} textAlign="right" /><Pressable onPress={() => void addCustomSubject()} style={styles.addSubjectButton}><Text style={{ color: C.white, fontSize: 11, fontWeight: "900" }}>إضافة</Text></Pressable></View>{subjects.map((name, index) => <View key={name}><View style={[styles.subjectRow, index < subjects.length - 1 && styles.divider]}><Pressable onPress={() => void setSubjectColor(name, savedSubjectColors[name] === subjectColors[index % subjectColors.length] ? subjectColors[(index + 1) % subjectColors.length] : subjectColors[index % subjectColors.length])} style={[styles.subjectDot, { backgroundColor: savedSubjectColors[name] ?? subjectColors[index % subjectColors.length] }]} /><Text style={styles.subjectName}>{name}</Text><Pressable onPress={() => void removeSubject(name)}><Text style={{ color: "#C04A75", fontSize: 10, fontWeight: "800" }}>حذف</Text></Pressable></View><ReminderPlanChoice label={`تنبيهات ${name}`} type="lesson" value={subjectReminderPlans[name] ?? []} onChange={(value) => void setSubjectReminderPlan(name, value)} /></View>)}</View></>;
   const dataPage = <><Text style={styles.section}>نقل البيانات</Text><View style={styles.card}><Text style={styles.transferHint}>انقل المواد والمواعيد إلى هاتف آخر عبر ملف JSON محفوظ ومشاركته من جهازك.</Text><View style={styles.transferRow}><Pressable onPress={() => void exportData()} style={styles.transferButton}><Text style={styles.transferButtonText}>تصدير البيانات</Text></Pressable><Pressable onPress={() => void handleImport()} style={[styles.transferButton, styles.importButton]}><Text style={styles.importButtonText}>استيراد ملف</Text></Pressable></View></View><Text style={styles.section}>النسخ الاحتياطي السحابي</Text><View style={styles.card}><Text style={styles.transferHint}>احفظ نسخة احتياطية بشكل آمن واستعدها على جهاز آخر عند تسجيل الدخول.</Text><View style={styles.transferRow}><Pressable onPress={() => void uploadCloudBackup()} style={styles.transferButton}><Text style={styles.transferButtonText}>{cloudPush.isPending ? "جارٍ الحفظ..." : "حفظ سحابي الآن"}</Text></Pressable><Pressable onPress={() => void restoreCloudBackup()} style={[styles.transferButton, styles.importButton]}><Text style={styles.importButtonText}>{cloudPull.isFetching ? "جارٍ الاستعادة..." : "استعادة سحابية"}</Text></Pressable></View>{syncMessage ? <Text style={styles.syncMessage}>{syncMessage}</Text> : null}</View></>;
