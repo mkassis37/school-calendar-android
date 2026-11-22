@@ -230,7 +230,7 @@ export function EventEditor({
 
   const addAttachments = async () => {
     const result = await DocumentPicker.getDocumentAsync({
-      type: ["image/*", "application/pdf"],
+      type: "*/*",
       multiple: true,
       copyToCacheDirectory: true,
     });
@@ -241,13 +241,17 @@ export function EventEditor({
       result.assets.slice(0, 12 - attachments.length).map(async (asset) => {
         const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const target = `${directory}${id}-${asset.name.replace(/[^a-zA-Z0-9._-]/g, "_")}`;
+        let storedUri = asset.uri;
         try {
           await FileSystem.copyAsync({ from: asset.uri, to: target });
-        } catch {}
+          storedUri = target;
+        } catch {
+          // Keep the original picker URI if copying is not supported.
+        }
         return {
           id,
           name: asset.name,
-          uri: target,
+          uri: storedUri,
           mimeType: asset.mimeType ?? "application/octet-stream",
           size: asset.size,
         };
@@ -839,7 +843,7 @@ export function EventEditor({
                     style={styles.attachButton}
                   >
                     <IconSymbol name="add" size={15} color={colors.primary} />
-                    <Text style={styles.attachText}>إضافة صورة أو PDF</Text>
+                    <Text style={styles.attachText}>إضافة صورة أو ملف</Text>
                   </Pressable>
                 </View>
                 {attachments.map((attachment) => (
