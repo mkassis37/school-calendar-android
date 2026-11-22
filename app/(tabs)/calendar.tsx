@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
-import { Alert, FlatList, Modal, PanResponder, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, FlatList, Image, Linking, Modal, PanResponder, Platform, Pressable, StyleSheet, Text, View } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
+import * as IntentLauncher from "expo-intent-launcher";
+import * as Sharing from "expo-sharing";
 import { ScreenContainer } from "@/components/screen-container";
 import { EventEditor } from "@/components/event-editor";
 import { IconSymbol } from "@/components/ui/icon-symbol";
-import { arabicNumber, ARABIC_MONTHS, EVENT_META, formatArabicDate, parseDateKey, toDateKey, useCalendar, WEEK_DAYS, type CalendarEvent } from "@/lib/calendar-store";
+import { arabicNumber, ARABIC_MONTHS, EVENT_META, formatArabicDate, parseDateKey, toDateKey, useCalendar, WEEK_DAYS, type CalendarEvent, type EventAttachment } from "@/lib/calendar-store";
 import { formatDisplayTime, normalizeReminderMinutes } from "@/lib/calendar-utils";
 
 const C = { ink: "#142330", muted: "#738291", teal: "#1AA394", canvas: "#F7F9FC", white: "#FFFFFF", border: "#E7ECF2", soft: "#EDF8F6", amber: "#D28A24" };
@@ -106,12 +109,66 @@ function EventCard({ event, timeFormat, subjectColor, onDetails, onEdit, onDelet
   return <Pressable onPress={onDetails} onLongPress={onDelete} style={({ pressed }) => [styles.eventCard, pressed && styles.cardPressed]}><View style={[styles.eventAccent, { backgroundColor: accent }]} /><View style={styles.eventMain}><View style={styles.eventTop}><View style={styles.eventActions}><Pressable onPress={onDelete} hitSlop={8}><IconSymbol name="delete" size={18} color="#A7B2BC" /></Pressable><Pressable onPress={onEdit} hitSlop={8}><IconSymbol name="edit" size={17} color="#A7B2BC" /></Pressable></View><View style={styles.eventTitleWrap}><View style={{ flexDirection: "row-reverse", alignItems: "center", gap: 6 }}><View style={[{ width: 8, height: 8, borderRadius: 4 }, { backgroundColor: accent }]} /><Text style={[styles.eventTitle, event.done && styles.doneText]}>{event.title}</Text></View><Text style={styles.eventSubject}>{event.subject}</Text></View></View><View style={styles.eventBottom}><Pressable onPress={onToggle} style={[styles.doneButton, event.done && { backgroundColor: C.teal, borderColor: C.teal }]}><IconSymbol name="check" size={14} color={event.done ? C.white : "#A4B1BC"} /></Pressable><Text style={styles.eventTime}>{formatDisplayTime(event.time, timeFormat)}</Text><View style={[styles.typeBadge, { backgroundColor: meta.soft }]}><Text style={[styles.typeBadgeText, { color: meta.color }]}>{meta.label}</Text></View></View></View></Pressable>;
 }
 
+async function openEventAttachment(attachment: EventAttachment) {
+  try {
+    if (Platform.OS === "android") {
+      const contentUri = await FileSystem.getContentUriAsync(attachment.uri);
+      await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+        data: contentUri,
+        type: attachment.mimeType || "*/*",
+        flags: 1 | 2,
+      });
+      return;
+    }
+    if (await Sharing.isAvailableAsync()) {
+      await Sharing.shareAsync(attachment.uri, { mimeType: attachment.mimeType });
+      return;
+    }
+    await Linking.openURL(attachment.uri);
+  } catch {
+    Alert.alert("تعذر فتح المرفق", "قد لا يتوفر تطبيق مناسب لفتح هذا النوع من الملفات.");
+  }
+}
+
 function EventDetails({ event, timeFormat, onClose }: { event: CalendarEvent | null; timeFormat: 12 | 24; onClose: () => void }) {
+  const [previewAttachment, setPreviewAttachment] = useState<EventAttachment | null>(null);
   if (!event) return null;
   const meta = EVENT_META[event.type];
   const reminders = normalizeReminderMinutes(event);
-  const reminderLabel = reminders.length === 0 ? "بدون تنبيه" : reminders.map((minutes) => minutes >= 1440 ? `قبل ${minutes / 1440} يوم` : minutes >= 60 ? `قبل ${minutes / 60} ساعة` : `قبل ${minutes} دقيقة`).join("، ");
-  return <Modal visible transparent animationType="fade" onRequestClose={onClose}><View style={styles.detailsOverlay}><View style={styles.detailsSheet}><View style={styles.detailsHeader}><Text style={styles.detailsTitle}>تفاصيل الموعد</Text><Pressable onPress={onClose} style={styles.iconButton}><IconSymbol name="close" size={20} color={C.muted} /></Pressable></View><View style={styles.detailsBadge}><Text style={[styles.typeBadgeText, { color: meta.color }]}>{meta.label}</Text></View><Text style={styles.detailsEventTitle}>{event.title}</Text><Text style={styles.detailsSubject}>{event.subject}</Text><View style={styles.detailsRows}><DetailRow label="التاريخ" value={formatArabicDate(parseDateKey(event.date))} /><DetailRow label="الوقت" value={formatDisplayTime(event.time, timeFormat)} /><DetailRow label="التنبيهات" value={reminderLabel} /><DetailRow label="الحالة" value={event.done ? "مكتمل" : "غير مكتمل"} />{event.repeatWeekly ? <DetailRow label="التكرار" value="أسبوعيًا" /> : null}</View>{event.notes ? <View style={styles.notesBox}><Text style={styles.notesLabel}>ملاحظات</Text><Text style={styles.notesText}>{event.notes}</Text></View> : null}<Pressable onPress={onClose} style={styles.closeDetails}><Text style={styles.closeDetailsText}>إغلاق</Text></Pressable></View></View></Modal>;
+  const reminderLabel = reminders.length === 0 ? "بدون تنبيه" : reminders.map((minutes) => minutes >= 1440 ? "قبل " + minutes / 1440 + " يوم" : minutes >= 60 ? "قبل " + minutes / 60 + " ساعة" : "قبل " + minutes + " دقيقة").join("، ");
+  return <>
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <View style={styles.detailsOverlay}>
+        <View style={styles.detailsSheet}>
+          <View style={styles.detailsHeader}><Text style={styles.detailsTitle}>تفاصيل الموعد</Text><Pressable onPress={onClose} style={styles.iconButton}><IconSymbol name="close" size={20} color={C.muted} /></Pressable></View>
+          <View style={styles.detailsBadge}><Text style={[styles.typeBadgeText, { color: meta.color }]}>{meta.label}</Text></View>
+          <Text style={styles.detailsEventTitle}>{event.title}</Text>
+          <Text style={styles.detailsSubject}>{event.subject}</Text>
+          <View style={styles.detailsRows}><DetailRow label="التاريخ" value={formatArabicDate(parseDateKey(event.date))} /><DetailRow label="الوقت" value={formatDisplayTime(event.time, timeFormat)} /><DetailRow label="التنبيهات" value={reminderLabel} /><DetailRow label="الحالة" value={event.done ? "مكتمل" : "غير مكتمل"} />{event.repeatWeekly ? <DetailRow label="التكرار" value="أسبوعيًا" /> : null}</View>
+          {event.notes ? <View style={styles.notesBox}><Text style={styles.notesLabel}>ملاحظات</Text><Text style={styles.notesText}>{event.notes}</Text></View> : null}
+          {event.attachments && event.attachments.length > 0 ? <View style={{ marginTop: 15, gap: 8 }}>
+            <Text style={styles.notesLabel}>المرفقات</Text>
+            {event.attachments.map((attachment) => {
+              const isImage = attachment.mimeType.startsWith("image/");
+              return <Pressable key={attachment.id} onPress={() => isImage ? setPreviewAttachment(attachment) : void openEventAttachment(attachment)} style={{ minHeight: 48, borderRadius: 11, borderWidth: 1, borderColor: C.border, padding: 9, flexDirection: "row-reverse", alignItems: "center", gap: 9 }}>
+                {isImage ? <Image source={{ uri: attachment.uri }} style={{ width: 38, height: 38, borderRadius: 7 }} /> : <IconSymbol name="assignment" size={20} color={C.teal} />}
+                <Text numberOfLines={1} style={{ flex: 1, color: C.ink, fontSize: 11, textAlign: "right" }}>{attachment.name}</Text>
+                <Text style={{ color: C.teal, fontSize: 10, fontWeight: "800" }}>{isImage ? "عرض" : "فتح"}</Text>
+              </Pressable>;
+            })}
+          </View> : null}
+          <Pressable onPress={onClose} style={styles.closeDetails}><Text style={styles.closeDetailsText}>إغلاق</Text></Pressable>
+        </View>
+      </View>
+    </Modal>
+    <Modal visible={!!previewAttachment} transparent animationType="fade" onRequestClose={() => setPreviewAttachment(null)}>
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.9)", justifyContent: "center", padding: 18 }}>
+        <Pressable onPress={() => setPreviewAttachment(null)} style={{ alignSelf: "flex-end", padding: 12 }}><IconSymbol name="close" size={25} color="#FFFFFF" /></Pressable>
+        {previewAttachment ? <Image source={{ uri: previewAttachment.uri }} resizeMode="contain" style={{ width: "100%", height: "78%" }} /> : null}
+        <Text numberOfLines={1} style={{ color: "#FFFFFF", textAlign: "center", marginTop: 12 }}>{previewAttachment?.name}</Text>
+      </View>
+    </Modal>
+  </>;
 }
 
 function DetailRow({ label, value }: { label: string; value: string }) {
